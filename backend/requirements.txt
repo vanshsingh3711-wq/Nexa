@@ -11,3 +11,8 @@ starlette==1.6.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 uvicorn==0.52.4
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+pyautogui>=0.9.54
+sounddevice>=0.4.6
+SpeechRecognition>=3.10.0

@@ -1,55 +1,91 @@
 from collections import deque
+import math
 
 class GestureStabilityFilter:
-    def __init__(self, history_size=10, confidence_threshold=0.7):
-        """
-        Initializes the stability filter.
-        
-        :param history_size: Number of previous frames to keep in memory.
-        :param confidence_threshold: Ratio of frames that must contain the same gesture 
-                                     to be considered "stable" (e.g., 0.7 means 70% of frames).
-        """
+    def __init__(self, history_size=7, confidence_threshold=0.6, base_alpha=0.7, ema_alpha=None):
         self.history_size = history_size
         self.confidence_threshold = confidence_threshold
         self.history = deque(maxlen=history_size)
+        self.base_alpha = ema_alpha if ema_alpha is not None else base_alpha
         
-    def get_stable_gesture(self, current_gesture):
-        """
-        Takes the raw gesture detected in the current frame and returns a stable gesture 
-        if it meets the threshold. Otherwise, returns 'Unknown'.
-        """
-        # Add the newest gesture to our sliding window (automatically removes oldest if full)
-        self.history.append(current_gesture)
+        # Keep track of smoothed coordinates
+        self.smoothed_x = None
+        self.smoothed_y = None
+        self.last_stable_gesture = "None"
+        self.unknown_count = 0
+
+    def get_stable_gesture(self, raw_gesture_data):
+        raw_gesture = raw_gesture_data.get("gesture", "None")
+        raw_x = raw_gesture_data.get("cursor_x", 0.0)
+        raw_y = raw_gesture_data.get("cursor_y", 0.0)
+        pinch_dist = raw_gesture_data.get("pinch_dist", 1.0)
+        norm_pinch_dist = raw_gesture_data.get("norm_pinch_dist", 1.0)
         
-        # Wait until we have enough frames to make a reasonable decision
-        if len(self.history) < self.history_size // 2:
-            return "Unknown"
+        # Hand not detected at all
+        if raw_gesture == "None":
+            self.history.clear()
+            self.smoothed_x = None
+            self.smoothed_y = None
+            self.last_stable_gesture = "None"
+            self.unknown_count = 0
+            return {
+                "gesture": "None",
+                "cursor_x": 0.0,
+                "cursor_y": 0.0,
+                "pinch_dist": 1.0,
+                "norm_pinch_dist": 1.0
+            }
             
-        # Count occurrences of all gestures currently in the sliding window
+        # 1. Responsive & Adaptive Coordinate Smoothing
+        if self.smoothed_x is None:
+            self.smoothed_x = raw_x
+            self.smoothed_y = raw_y
+        else:
+            # Calculate distance moved in frame
+            move_dist = math.hypot(raw_x - self.smoothed_x, raw_y - self.smoothed_y)
+            # Adapt alpha: fast movement gets higher alpha (no lag), small movement gets lower alpha (no jitter)
+            adaptive_alpha = min(1.0, self.base_alpha + (move_dist * 2.0))
+            self.smoothed_x = (adaptive_alpha * raw_x) + ((1.0 - adaptive_alpha) * self.smoothed_x)
+            self.smoothed_y = (adaptive_alpha * raw_y) + ((1.0 - adaptive_alpha) * self.smoothed_y)
+            
+        # 2. Stable Gesture Classification with Dropout Resistance
+        self.history.append(raw_gesture)
+        
         gesture_counts = {}
-        for gesture in self.history:
-            # Ignore 'Unknown' or 'None' when calculating majority votes for actual gestures
-            if gesture not in ("Unknown", "None"):
-                gesture_counts[gesture] = gesture_counts.get(gesture, 0) + 1
+        for g in self.history:
+            if g not in ("Unknown", "None"):
+                gesture_counts[g] = gesture_counts.get(g, 0) + 1
                 
-        # If there are no real gestures in the history, return what we got
-        if not gesture_counts:
-            return current_gesture if current_gesture in ("Unknown", "None") else "Unknown"
+        stable_gesture = "Unknown"
+        if gesture_counts:
+            best_gesture = max(gesture_counts, key=gesture_counts.get)
+            votes = gesture_counts[best_gesture]
+            total_history = len(self.history)
             
-        # Find the gesture that appeared the most in the recent frames
-        best_gesture = max(gesture_counts, key=gesture_counts.get)
-        best_count = gesture_counts[best_gesture]
-        
-        # Check if the most common gesture meets the threshold
-        required_count = len(self.history) * self.confidence_threshold
-        
-        if best_count >= required_count:
-            return best_gesture
-            
-        return "Unknown"
-        
+            if votes >= max(2, int(total_history * self.confidence_threshold)):
+                stable_gesture = best_gesture
+                self.last_stable_gesture = best_gesture
+                self.unknown_count = 0
+                
+        if stable_gesture == "Unknown":
+            self.unknown_count += 1
+            # Maintain previous stable gesture for up to 3 transitional frames to prevent flickering
+            if self.unknown_count <= 3 and self.last_stable_gesture not in ("None", "Unknown"):
+                stable_gesture = self.last_stable_gesture
+            else:
+                self.last_stable_gesture = "Unknown"
+                
+        return {
+            "gesture": stable_gesture,
+            "cursor_x": self.smoothed_x,
+            "cursor_y": self.smoothed_y,
+            "pinch_dist": pinch_dist,
+            "norm_pinch_dist": norm_pinch_dist
+        }
+
     def reset(self):
-        """
-        Clears the history. Useful if there is a long break between detections.
-        """
         self.history.clear()
+        self.smoothed_x = None
+        self.smoothed_y = None
+        self.last_stable_gesture = "None"
+        self.unknown_count = 0
