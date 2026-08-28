@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from pydantic import BaseModel, Field, ValidationError
 from core.security.models import RiskLevel
 
@@ -37,9 +37,21 @@ class PolicyLoader:
     """
     Loads and validates declarative policy configurations.
     Fails closed on any parse error, missing file, or schema invalidity.
+    Enforces strict path-traversal protection and restricted directory access.
     """
-    @staticmethod
-    def load_from_dict(data: dict) -> PolicyConfig:
+    ALLOWED_POLICY_DIRS: List[Path] = [
+        Path(__file__).resolve().parent,
+    ]
+
+    @classmethod
+    def register_allowed_dir(cls, directory: Union[str, Path]) -> None:
+        """Registers an authorized directory from which policy files may be loaded."""
+        resolved = Path(directory).resolve()
+        if resolved not in cls.ALLOWED_POLICY_DIRS:
+            cls.ALLOWED_POLICY_DIRS.append(resolved)
+
+    @classmethod
+    def load_from_dict(cls, data: dict) -> PolicyConfig:
         try:
             return PolicyConfig.model_validate(data)
         except ValidationError as e:
@@ -47,29 +59,44 @@ class PolicyLoader:
         except Exception as e:
             raise PolicyConfigurationError(f"Failed to load policy configuration: {e}") from e
 
-    @staticmethod
-    def load_from_json_string(json_str: str) -> PolicyConfig:
+    @classmethod
+    def load_from_json_string(cls, json_str: str) -> PolicyConfig:
         try:
             data = json.loads(json_str)
         except json.JSONDecodeError as e:
             raise PolicyConfigurationError(f"Invalid JSON in policy configuration: {e}") from e
-        return PolicyLoader.load_from_dict(data)
+        return cls.load_from_dict(data)
 
-    @staticmethod
-    def load_from_file(file_path: Optional[str] = None) -> PolicyConfig:
+    @classmethod
+    def load_from_file(cls, file_path: Optional[str] = None) -> PolicyConfig:
         if file_path is None:
-            # Default to default_policy.json co-located in the same directory
+            # Default to default_policy.json co-located in the security directory
             base_dir = Path(__file__).resolve().parent
-            file_path = str(base_dir / "default_policy.json")
+            path = (base_dir / "default_policy.json").resolve()
+        else:
+            # Check for path traversal indicators
+            if ".." in str(file_path):
+                raise PolicyConfigurationError(f"Path traversal detected in policy file path: '{file_path}'")
 
-        path = Path(file_path)
+            path = Path(file_path).resolve()
+
+            # Verify that the canonical path resides within an authorized policy directory
+            is_allowed = any(
+                path == allowed_dir or allowed_dir in path.parents
+                for allowed_dir in cls.ALLOWED_POLICY_DIRS
+            )
+            if not is_allowed:
+                raise PolicyConfigurationError(
+                    f"Access denied: Policy file '{file_path}' resides outside authorized policy directories."
+                )
+
         if not path.exists():
-            raise PolicyConfigurationError(f"Policy configuration file not found at: {file_path}")
+            raise PolicyConfigurationError(f"Policy configuration file not found at: {path}")
 
         try:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
         except Exception as e:
-            raise PolicyConfigurationError(f"Cannot read policy file at {file_path}: {e}") from e
+            raise PolicyConfigurationError(f"Cannot read policy file at {path}: {e}") from e
 
-        return PolicyLoader.load_from_json_string(content)
+        return cls.load_from_json_string(content)

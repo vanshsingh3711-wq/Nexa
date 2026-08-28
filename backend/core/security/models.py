@@ -1,4 +1,5 @@
 import time
+import json
 from enum import Enum
 from typing import Dict, Any, Optional
 from uuid import UUID, uuid4
@@ -39,10 +40,21 @@ class FileTargetParams(StrictBaseModel):
     """Schema for file operation targeting."""
     path: str = Field(..., min_length=1, description="Target file path")
 
+def _validate_depth(data: Any, current: int = 1, max_depth: int = 6) -> None:
+    if current > max_depth:
+        raise ValueError(f"Payload nesting depth exceeds maximum allowed limit of {max_depth}.")
+    if isinstance(data, dict):
+        for v in data.values():
+            _validate_depth(v, current + 1, max_depth)
+    elif isinstance(data, (list, tuple, set)):
+        for item in data:
+            _validate_depth(item, current + 1, max_depth)
+
 class StructuredActionRequest(BaseModel):
     """
     Contract for all action intents generated across any subsystem (Voice, Gesture, API, AI).
     The Policy Checker treats all requests as untrusted regardless of source.
+    Includes defense against payload DoS via maximum size and recursion depth limits.
     """
     model_config = ConfigDict(extra="forbid")
 
@@ -58,6 +70,24 @@ class StructuredActionRequest(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("String field cannot be blank or whitespace.")
+        return v
+
+    @field_validator("params")
+    @classmethod
+    def validate_params_security_bounds(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        if not v:
+            return v
+        
+        # 1. Enforce max payload size limit (64 KB)
+        try:
+            serialized = json.dumps(v)
+            if len(serialized.encode("utf-8")) > 65536:
+                raise ValueError("Payload size exceeds maximum permitted limit (64 KB).")
+        except TypeError:
+            pass # Non-serializable objects will be caught by schema validation
+
+        # 2. Enforce maximum nesting depth to prevent DoS recursion
+        _validate_depth(v, current=1, max_depth=6)
         return v
 
 class PolicyDecisionResult(BaseModel):

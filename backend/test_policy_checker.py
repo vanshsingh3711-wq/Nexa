@@ -196,10 +196,11 @@ def test_malformed_policy_fails_closed():
         assert "Malformed policy configuration" in str(e)
     assert failed, "Expected PolicyConfigurationError on malformed schema"
 
-    # 3. Non-existent file path
+    # 3. Non-existent file path inside allowed directory
     failed = False
     try:
-        PolicyLoader.load_from_file("/non/existent/policy.json")
+        security_dir = os.path.dirname(__file__)
+        PolicyLoader.load_from_file(os.path.join(security_dir, "core", "security", "non_existent.json"))
     except PolicyConfigurationError as e:
         failed = True
         assert "not found" in str(e)
@@ -296,6 +297,88 @@ def test_audit_logging():
     assert event.decision == PolicyDecision.ALLOW
     print("[PASS] test_audit_logging")
 
+def test_array_recursion_log_leak_fix():
+    """13. Security Fix: Verify arrays/lists with nested objects are properly sanitized."""
+    audit_logger = AuditLogger()
+    raw_payload = {
+        "login_data": [{"user": "admin", "password": "super_secret_password"}],
+        "nested_records": [
+            {"account": {"token": "secret_token_123", "public_id": "acc_999"}},
+            {"account": {"api_key": "key_xyz", "public_id": "acc_888"}}
+        ]
+    }
+    sanitized = audit_logger.sanitize_params(raw_payload)
+    assert sanitized["login_data"][0]["password"] == "[REDACTED]"
+    assert sanitized["login_data"][0]["user"] == "admin"
+    assert sanitized["nested_records"][0]["account"]["token"] == "[REDACTED]"
+    assert sanitized["nested_records"][0]["account"]["public_id"] == "acc_999"
+    assert sanitized["nested_records"][1]["account"]["api_key"] == "[REDACTED]"
+    print("[PASS] test_array_recursion_log_leak_fix")
+
+def test_dos_depth_limit_and_recursion_protection():
+    """14. Security Fix: Depth limiter in sanitizer and schema limits on StructuredActionRequest."""
+    audit_logger = AuditLogger()
+
+    # Build a 20-level deep dictionary
+    deep_payload = {"key": "value"}
+    for i in range(20):
+        deep_payload = {"nested": deep_payload}
+
+    # Audit logger depth limiter should safely truncate without RecursionError
+    sanitized = audit_logger.sanitize_params(deep_payload, max_depth=5)
+    assert sanitized is not None
+
+    # StructuredActionRequest should strictly reject excessively deep payloads
+    rejected = False
+    try:
+        StructuredActionRequest(
+            action="volume_up",
+            params=deep_payload,
+            source="ai"
+        )
+    except ValueError as e:
+        rejected = True
+        assert "nesting depth exceeds" in str(e)
+    assert rejected, "Expected StructuredActionRequest to reject excessively deep payload"
+    print("[PASS] test_dos_depth_limit_and_recursion_protection")
+
+def test_extensible_sensitive_keys():
+    """15. Security Fix: Verify custom/dynamic sensitive keys are redacted."""
+    custom_logger = AuditLogger(extra_sensitive_keys={"pin_code", "credit_card", "ssn"})
+    payload = {
+        "user": "bob",
+        "pin_code": "1234",
+        "credit_card": "4111222233334444",
+        "ssn": "000-11-2222"
+    }
+    sanitized = custom_logger.sanitize_params(payload)
+    assert sanitized["pin_code"] == "[REDACTED]"
+    assert sanitized["credit_card"] == "[REDACTED]"
+    assert sanitized["ssn"] == "[REDACTED]"
+    assert sanitized["user"] == "bob"
+    print("[PASS] test_extensible_sensitive_keys")
+
+def test_path_traversal_prevention():
+    """16. Security Fix: PolicyLoader strictly blocks path traversal and unauthorized paths."""
+    # 1. Reject path with traversal sequence '..'
+    failed_traversal = False
+    try:
+        PolicyLoader.load_from_file("../../tmp/hacked_policy.json")
+    except PolicyConfigurationError as e:
+        failed_traversal = True
+        assert "Path traversal detected" in str(e)
+    assert failed_traversal, "Expected PolicyConfigurationError on path traversal"
+
+    # 2. Reject absolute path outside authorized directory
+    failed_unauthorized = False
+    try:
+        PolicyLoader.load_from_file("C:/Windows/System32/hacked_policy.json")
+    except PolicyConfigurationError as e:
+        failed_unauthorized = True
+        assert "outside authorized policy directories" in str(e)
+    assert failed_unauthorized, "Expected PolicyConfigurationError on unauthorized directory path"
+    print("[PASS] test_path_traversal_prevention")
+
 def run_all():
     test_allowed_low_risk_action()
     test_unknown_action_denied()
@@ -308,7 +391,12 @@ def run_all():
     test_no_execution_by_policy_checker()
     test_action_router_execution_gate()
     test_audit_logging()
-    print("\nALL POLICY CHECKER & DECISION ENGINE TESTS PASSED!")
+    # New Security Fix Tests
+    test_array_recursion_log_leak_fix()
+    test_dos_depth_limit_and_recursion_protection()
+    test_extensible_sensitive_keys()
+    test_path_traversal_prevention()
+    print("\nALL 16 POLICY CHECKER & SECURITY HARDENING TESTS PASSED!")
 
 if __name__ == "__main__":
     run_all()
