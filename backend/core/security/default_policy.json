@@ -1,0 +1,74 @@
+{
+  "version": "1.0",
+  "name": "Nexa Default Security Policy",
+  "actions": {
+    "move_mouse": {
+      "risk": "LOW"
+    },
+    "left_click": {
+      "risk": "LOW"
+    },
+    "double_click": {
+      "risk": "LOW"
+    },
+    "scroll": {
+      "risk": "LOW"
+    },
+    "toggle_play_pause": {
+      "risk": "LOW"
+    },
+    "volume_up": {
+      "risk": "LOW"
+    },
+    "volume_down": {
+      "risk": "LOW"
+    },
+    "browser_back": {
+      "risk": "LOW"
+    },
+    "browser_forward": {
+      "risk": "LOW"
+    },
+    "next_tab": {
+      "risk": "LOW"
+    },
+    "prev_tab": {
+      "risk": "LOW"
+    },
+    "zoom_out": {
+      "risk": "LOW"
+    },
+    "open_task_view": {
+      "risk": "LOW"
+    },
+    "select_next_window": {
+      "risk": "LOW"
+    },
+    "select_prev_window": {
+      "risk": "LOW"
+    },
+    "confirm_selection": {
+      "risk": "LOW"
+    },
+    "close_tab": {
+      "risk": "MEDIUM"
+    },
+    "close_app": {
+      "risk": "MEDIUM"
+    },
+    "delete_file": {
+      "risk": "HIGH"
+    }
+  },
+  "blocked_actions": [
+    "execute_shell",
+    "run_powershell",
+    "modify_firewall",
+    "modify_antivirus",
+    "access_credentials",
+    "format_drive",
+    "install_driver",
+    "disable_security"
+  ],
+  "require_confirmation_for_high_risk": true
+}

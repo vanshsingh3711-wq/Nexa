@@ -1,0 +1,74 @@
+import time
+from enum import Enum
+from typing import Dict, Any, Optional
+from uuid import UUID, uuid4
+from pydantic import BaseModel, Field, ConfigDict, field_validator
+
+class RiskLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    BLOCKED = "BLOCKED"
+
+class PolicyDecision(str, Enum):
+    ALLOW = "ALLOW"
+    CONFIRM_NEEDED = "CONFIRM_NEEDED"
+    DENY = "DENY"
+
+class StrictBaseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+class EmptyParams(StrictBaseModel):
+    """Schema for actions requiring zero parameters."""
+    pass
+
+class MouseMoveParams(StrictBaseModel):
+    """Schema for cursor movement."""
+    norm_x: float = Field(..., ge=0.0, le=1.0, description="Normalized X coordinate (0.0 to 1.0)")
+    norm_y: float = Field(..., ge=0.0, le=1.0, description="Normalized Y coordinate (0.0 to 1.0)")
+
+class ScrollParams(StrictBaseModel):
+    """Schema for scroll wheel input."""
+    amount: int = Field(..., description="Scroll delta amount")
+
+class AppTargetParams(StrictBaseModel):
+    """Schema for application/window targeting actions."""
+    target: str = Field(..., min_length=1, description="Application or window identifier")
+
+class FileTargetParams(StrictBaseModel):
+    """Schema for file operation targeting."""
+    path: str = Field(..., min_length=1, description="Target file path")
+
+class StructuredActionRequest(BaseModel):
+    """
+    Contract for all action intents generated across any subsystem (Voice, Gesture, API, AI).
+    The Policy Checker treats all requests as untrusted regardless of source.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    action: str = Field(..., min_length=1, description="Registered action identifier")
+    params: Dict[str, Any] = Field(default_factory=dict, description="Action parameter payload")
+    source: str = Field(..., min_length=1, description="Originating source (gesture, voice, api, ai, etc.)")
+    correlation_id: UUID = Field(default_factory=uuid4, description="Unique correlation identifier for tracing and audit")
+    timestamp: float = Field(default_factory=time.time, description="Epoch timestamp of request generation")
+
+    @field_validator("action", "source")
+    @classmethod
+    def strip_and_validate_non_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("String field cannot be blank or whitespace.")
+        return v
+
+class PolicyDecisionResult(BaseModel):
+    """
+    Deterministic authorization decision output produced by the Policy Checker.
+    Contains no execution side-effects.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    decision: PolicyDecision = Field(..., description="Final authorization decision")
+    risk_level: RiskLevel = Field(..., description="Determined risk level for the action")
+    reason: str = Field(..., description="Security reason justifying the decision")
+    correlation_id: UUID = Field(..., description="Correlation ID matching the evaluated request")
+    timestamp: float = Field(default_factory=time.time, description="Epoch timestamp of decision")
