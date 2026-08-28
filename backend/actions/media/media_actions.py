@@ -7,20 +7,14 @@ except ImportError:
 
 def toggle_play_pause() -> bool:
     """
-    Simulates a 'Media Play/Pause' keystroke using pyautogui for maximum compatibility.
+    Simulates a 'Media Play/Pause' keystroke using pyautogui for cross-platform compatibility.
     Returns True if the action was successfully triggered, False otherwise.
     """
-    if os.name != 'nt':
-        print("Error: toggle_play_pause is only supported on Windows.")
-        return False
-        
     if pyautogui is None:
         print("Error: pyautogui is not installed. Please run: pip install pyautogui")
         return False
         
     try:
-        # pyautogui automatically handles the complex Windows SendInput structures,
-        # scan codes, and extended key flags for media keys.
         pyautogui.press('playpause')
         return True
     except Exception as e:
