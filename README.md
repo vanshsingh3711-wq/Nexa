@@ -33,6 +33,21 @@ Nexa/
 └── README.md
 ```
 
+## Supported Gestures & Controls
+
+| Gesture | Movement | Action |
+| :--- | :--- | :--- |
+| **Open Palm (5 Fingers)** | Swipe Up | **Open Task View / Tab Page** (`Win + Tab`) |
+| **3 Fingers (Index+Middle+Ring)** | Swipe Left | **Browser Back** (`Alt + Left`) |
+| **3 Fingers (Index+Middle+Ring)** | Swipe Right | **Browser Forward** (`Alt + Right`) |
+| **2 Fingers (Peace)** | Swipe Right | **Select Next Tab / Window** |
+| **2 Fingers (Peace)** | Swipe Left | **Select Previous Tab / Window** |
+| **Pinch (Thumb + Index)** | Touch tips | **Enter / Open Selected Tab** (in Tab Mode) / **Left Click** (Mouse Mode) |
+| **Index Finger (1 Finger)** | Point & Move | **Move Mouse Cursor** |
+| **Closed Fist** | Hold | **Toggle Play / Pause** |
+| **Thumb Up** | Point Up | **Volume Up** |
+| **Thumb Down** | Point Down | **Volume Down** |
+
 ## Getting Started
 
 ### 1. Prerequisites
@@ -58,3 +73,4 @@ python test_camera.py
 ```bash
 python main.py
 ```
+

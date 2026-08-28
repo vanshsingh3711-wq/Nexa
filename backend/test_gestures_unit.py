@@ -136,7 +136,23 @@ def test_classifier():
     assert res["gesture"] == "Index", f"Expected Index, got {res['gesture']}"
     print("[PASS] Index finger classified correctly")
     
-    # 6. Peace (Index + Middle extended, ring + pinky curled)
+    # 6. Three Fingers (Index + Middle + Ring extended, Pinky curled)
+    three_fingers = create_hand(
+        thumb_tip=(0.48, 0.65),
+        index_tip=(0.45, 0.3), # Extended
+        index_pip=(0.45, 0.42),
+        middle_tip=(0.5, 0.28), # Extended
+        middle_pip=(0.5, 0.4),
+        ring_tip=(0.55, 0.3),  # Extended
+        ring_pip=(0.55, 0.43),
+        pinky_tip=(0.58, 0.68), # Curled
+        pinky_pip=(0.6, 0.50)
+    )
+    res = classifier.classify(three_fingers)
+    assert res["gesture"] == "Three Fingers", f"Expected Three Fingers, got {res['gesture']}"
+    print("[PASS] Three Fingers classified correctly")
+    
+    # 7. Peace (Index + Middle extended, ring + pinky curled)
     peace = create_hand(
         thumb_tip=(0.48, 0.65),
         index_tip=(0.45, 0.3), # Extended
@@ -152,7 +168,7 @@ def test_classifier():
     assert res["gesture"] == "Peace", f"Expected Peace, got {res['gesture']}"
     print("[PASS] Peace sign classified correctly")
     
-    # 7. Pinch (Thumb tip touches Index tip)
+    # 8. Pinch (Thumb tip touches Index tip)
     pinch = create_hand(
         thumb_tip=(0.45, 0.35),
         index_tip=(0.45, 0.35), # Touching
@@ -196,46 +212,58 @@ def test_stability_and_router():
     # Feeding Unknown should NOT trigger swipe detector
     for _ in range(10):
         router.dispatch({"gesture": "Unknown", "cursor_x": 0.1, "cursor_y": 0.1}, {"gesture": "Unknown"})
-    assert len(router.swipe_detector.history) == 0, "Swipe detector should not accumulate points on Unknown"
+    assert len(router.palm_swipe_detector.history) == 0, "Swipe detector should not accumulate points on Unknown"
     print("[PASS] Swipe detector strictly ignores Unknown movements")
-    
-    # Feeding Open Palm moving right across screen should detect Swipe Right (Next page / Forward)
-    router.last_swipe_time = 0.0
-    for i in range(8):
-        router.dispatch({"gesture": "Open Palm", "cursor_x": 0.2 + i*0.06, "cursor_y": 0.5}, {"gesture": "Open Palm"})
-    print("[PASS] Open Palm Swipe Right (Next Page) triggered properly")
-    
-    # Feeding Open Palm moving left across screen should detect Swipe Left (Backward)
-    router.last_swipe_time = 0.0
-    for i in range(8):
-        router.dispatch({"gesture": "Open Palm", "cursor_x": 0.8 - i*0.06, "cursor_y": 0.5}, {"gesture": "Open Palm"})
-    print("[PASS] Open Palm Swipe Left (Backward) triggered properly")
     
     # Feeding Open Palm moving up across screen should detect Swipe Up (Open Task View)
     router.last_swipe_time = 0.0
     for i in range(8):
         router.dispatch({"gesture": "Open Palm", "cursor_x": 0.5, "cursor_y": 0.8 - i*0.06}, {"gesture": "Open Palm"})
+    assert router.tab_selection_mode, "Router should enter tab_selection_mode on Open Palm Swipe Up"
     print("[PASS] Open Palm Swipe Up (Open Task View) triggered properly")
     
-    # Feeding Peace sign moving right should select next window
+    # Feeding Three Fingers moving right across screen should detect Swipe Right (Browser Forward)
+    router.last_swipe_time = 0.0
+    for i in range(8):
+        router.dispatch({"gesture": "Three Fingers", "cursor_x": 0.2 + i*0.06, "cursor_y": 0.5}, {"gesture": "Three Fingers"})
+    print("[PASS] Three Fingers Swipe Right (Browser Forward) triggered properly")
+    
+    # Feeding Three Fingers moving left across screen should detect Swipe Left (Browser Back)
+    router.last_swipe_time = 0.0
+    for i in range(8):
+        router.dispatch({"gesture": "Three Fingers", "cursor_x": 0.8 - i*0.06, "cursor_y": 0.5}, {"gesture": "Three Fingers"})
+    print("[PASS] Three Fingers Swipe Left (Browser Back) triggered properly")
+    
+    # Feeding Peace sign moving right should select next window and activate tab_selection_mode
     router.last_swipe_time = 0.0
     for i in range(8):
         router.dispatch({"gesture": "Peace", "cursor_x": 0.2 + i*0.06, "cursor_y": 0.5}, {"gesture": "Peace"})
-    print("[PASS] Peace Swipe Right (Select Next Window) triggered properly")
+    assert router.tab_selection_mode, "Router should be in tab_selection_mode after Peace swipe"
+    print("[PASS] Peace Swipe Right (Select Next Window) triggered and activated tab_selection_mode")
+    
+    # Feeding Pinch gesture while in tab_selection_mode should confirm selection and reset tab_selection_mode
+    router.last_click_time = 0.0
+    router.dispatch({"gesture": "Pinch", "cursor_x": 0.5, "cursor_y": 0.5}, {"gesture": "Peace"})
+    assert not router.tab_selection_mode, "Router should exit tab_selection_mode after Pinch confirm"
+    print("[PASS] Pinch confirmed window/tab selection (Enter) and exited tab_selection_mode")
     
     # Feeding Peace sign moving left should select prev window
     router.last_swipe_time = 0.0
     for i in range(8):
         router.dispatch({"gesture": "Peace", "cursor_x": 0.8 - i*0.06, "cursor_y": 0.5}, {"gesture": "Peace"})
+    assert router.tab_selection_mode, "Router should re-enter tab_selection_mode after Peace swipe"
     print("[PASS] Peace Swipe Left (Select Prev Window) triggered properly")
     
-    # Feeding Peace sign moving down should confirm selection (Enter)
-    router.last_swipe_time = 0.0
-    for i in range(8):
-        router.dispatch({"gesture": "Peace", "cursor_x": 0.5, "cursor_y": 0.2 + i*0.06}, {"gesture": "Peace"})
-    print("[PASS] Peace Swipe Down (Confirm Selection / Enter) triggered properly")
+    # Feeding Pinch while NOT in tab_selection_mode should perform normal mouse click
+    router.last_click_time = 0.0
+    router.tab_selection_mode = False
+    router.dispatch({"gesture": "Pinch", "cursor_x": 0.5, "cursor_y": 0.5}, {"gesture": "Index"})
+    assert not router.tab_selection_mode, "Router should remain out of tab_selection_mode on normal click"
+    print("[PASS] Normal Pinch triggered mouse click")
 
 if __name__ == "__main__":
     test_classifier()
     test_stability_and_router()
     print("\nALL UNIT TESTS PASSED SUCCESSFULLY!")
+
+

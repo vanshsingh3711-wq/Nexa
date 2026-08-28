@@ -15,7 +15,7 @@ except ImportError:
 class VoiceListener:
     def __init__(self, on_mode_change=None, sample_rate=16000):
         """
-        Listens for voice commands like 'Hand gesture mode on' / 'Hand gesture mode off'
+        Listens for voice commands like 'Start Nexa' / 'Stop Nexa' or 'Mode On' / 'Mode Off'
         using a lightweight background audio stream and speech recognition.
         """
         self.on_mode_change = on_mode_change  # Callback func(is_active: bool, command_text: str)
@@ -23,17 +23,25 @@ class VoiceListener:
         self.recognizer = sr.Recognizer() if sr else None
         self.is_running = False
         self.thread = None
+        self.energy_threshold = 40.0
 
     def start(self):
         """Start listening in a background daemon thread."""
         if self.is_running:
             return
+        if not sd:
+            print("[VoiceListener] sounddevice not available. Voice commands disabled.")
+            return
+        if not sr:
+            print("[VoiceListener] speech_recognition not available. Voice commands disabled.")
+            return
+            
         self.is_running = True
         self.thread = threading.Thread(target=self._listen_loop, daemon=True)
         self.thread.start()
-        print("\n=== VOICE LISTENER STARTED ===")
-        print("Say 'Start Nexa' (or 'Mode On') to activate.")
-        print("Say 'Stop Nexa' (or 'Mode Off') to deactivate.\n")
+        print("\n=== VOICE LISTENER INITIALIZED ===")
+        print("🎤 Say 'Start Nexa' or 'Mode On' to activate gesture controls.")
+        print("🎤 Say 'Stop Nexa' or 'Mode Off' to deactivate.\n")
 
     def stop(self):
         """Stop listening."""
@@ -45,8 +53,7 @@ class VoiceListener:
     def _listen_loop(self):
         chunk_duration = 0.1  # 100ms chunks
         chunk_samples = int(self.sample_rate * chunk_duration)
-        energy_threshold = 250  # More sensitive threshold for clear audio pickup
-        silence_limit = 0.6  # Seconds of silence to mark phrase end
+        silence_limit = 0.5   # Seconds of silence to mark phrase end
         
         audio_buffer = []
         is_speaking = False
@@ -54,15 +61,27 @@ class VoiceListener:
         
         try:
             with sd.InputStream(samplerate=self.sample_rate, channels=1, dtype='int16') as stream:
+                # 1. Quick ambient noise calibration for 0.5s
+                calibration_samples = []
+                for _ in range(5):
+                    data, _ = stream.read(chunk_samples)
+                    samples = data.flatten()
+                    calibration_samples.append(np.sqrt(np.mean(samples.astype(np.float64)**2)))
+                ambient_rms = float(np.mean(calibration_samples))
+                self.energy_threshold = max(25.0, min(120.0, ambient_rms * 2.5 + 15.0))
+                print(f"[VoiceListener] Mic calibrated (Ambient: {ambient_rms:.1f}, Trigger Threshold: {self.energy_threshold:.1f})")
+                
+                # 2. Continuous listening stream
                 while self.is_running:
                     data, overflowed = stream.read(chunk_samples)
                     samples = data.flatten()
                     rms = np.sqrt(np.mean(samples.astype(np.float64)**2))
                     
-                    if rms > energy_threshold:
+                    if rms > self.energy_threshold:
                         if not is_speaking:
                             is_speaking = True
                             audio_buffer = []
+                            # print("[Voice] Hearing voice...")
                         silence_start_time = None
                         audio_buffer.append(data.tobytes())
                     elif is_speaking:
@@ -73,7 +92,7 @@ class VoiceListener:
                             # Finished speaking phrase
                             is_speaking = False
                             silence_start_time = None
-                            if len(audio_buffer) >= 4:  # At least ~0.4s of speech
+                            if len(audio_buffer) >= 3:  # At least ~0.3s of speech
                                 pcm_bytes = b"".join(audio_buffer)
                                 threading.Thread(target=self._process_audio, args=(pcm_bytes,), daemon=True).start()
                             audio_buffer = []
@@ -90,7 +109,7 @@ class VoiceListener:
             text = self.recognizer.recognize_google(audio_data).lower().strip()
             print(f"[Voice] Recognized: '{text}'")
             
-            # Simple & easy activation phrases
+            # Simple & comprehensive activation phrases
             activation_phrases = [
                 "start nexa",
                 "nexa start",
@@ -101,13 +120,21 @@ class VoiceListener:
                 "hand on",
                 "start",
                 "activate",
+                "enable",
                 "hand gesture mode on",
                 "gesture mode on",
                 "gesture on",
-                "kesar mode on"  # Common phonetic mishearing of gesture mode on
+                "hand mode on",
+                "start gesture",
+                "start next",
+                "next on",
+                "nexus on",
+                "nexus start",
+                "alexa on",
+                "kesar mode on"
             ]
             
-            # Simple & easy deactivation phrases
+            # Simple & comprehensive deactivation phrases
             deactivation_phrases = [
                 "stop nexa",
                 "nexa stop",
@@ -118,9 +145,14 @@ class VoiceListener:
                 "hand off",
                 "stop",
                 "deactivate",
+                "disable",
                 "hand gesture mode off",
                 "gesture mode off",
                 "gesture off",
+                "hand mode off",
+                "stop gesture",
+                "stop next",
+                "next off",
                 "kesar mode off"
             ]
             
@@ -136,8 +168,9 @@ class VoiceListener:
                     self.on_mode_change(True, text)
                     
         except sr.UnknownValueError:
-            pass  # Background noise or unrecognizable speech
+            # print("[Voice] (Speech was not clear)")
+            pass
         except sr.RequestError as e:
-            print(f"[VoiceListener] Speech recognition service error: {e}")
+            print(f"[VoiceListener] Speech recognition network error: {e}")
         except Exception as e:
             print(f"[VoiceListener] Recognition error: {e}")

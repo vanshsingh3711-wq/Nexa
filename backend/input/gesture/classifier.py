@@ -32,6 +32,9 @@ class GestureClassifier:
         index_mcp = hand_landmarks[5]
         index_pip = hand_landmarks[6]
         index_tip = hand_landmarks[8]
+        middle_tip = hand_landmarks[12]
+        ring_tip = hand_landmarks[16]
+        pinky_tip = hand_landmarks[20]
         pinky_mcp = hand_landmarks[17]
         
         # 1. Non-thumb finger extension detection (rotation-tolerant)
@@ -51,7 +54,7 @@ class GestureClassifier:
             dist_mcp_pip = math.hypot(pip.x - mcp.x, pip.y - mcp.y)
             
             # A finger is extended if tip is further from wrist/mcp than pip
-            is_ext = (dist_wrist_tip > dist_wrist_pip * 1.1) and (dist_mcp_tip > dist_mcp_pip * 1.1)
+            is_ext = (dist_wrist_tip > dist_wrist_pip * 1.03) and (dist_mcp_tip > dist_mcp_pip * 1.03)
             extended.append(is_ext)
             
         is_index_ext, is_middle_ext, is_ring_ext, is_pinky_ext = extended
@@ -73,11 +76,10 @@ class GestureClassifier:
         
         # 5. Gesture Classification
         gesture = "Unknown"
-        other_4_closed = not (is_index_ext or is_middle_ext or is_ring_ext or is_pinky_ext)
-        num_extended_fingers = sum(1 for e in extended if e) + (1 if is_thumb_ext else 0)
+        num_ext = sum(1 for e in extended if e)
         
         # Priority A: Closed Fist / Thumbs Up / Thumbs Down (all 4 fingers curled tight into palm)
-        if other_4_closed:
+        if num_ext == 0:
             if is_thumb_ext and dist_thumb_index_mcp > palm_size * 0.65:
                 # Distinguish Thumb Up vs Thumb Down by vertical position relative to MCP and wrist
                 if thumb_tip.y < thumb_mcp.y - palm_size * 0.15 and thumb_tip.y < wrist.y:
@@ -93,22 +95,32 @@ class GestureClassifier:
         elif is_pinching:
             gesture = "Pinch"
             
-        # Priority C: Open Palm (All 4 fingers extended)
+        # Priority C: Open Palm (All 4 non-thumb fingers extended)
         elif is_index_ext and is_middle_ext and is_ring_ext and is_pinky_ext:
             gesture = "Open Palm"
             
-        # Priority D: Peace / V-Sign (Index + Middle extended, Ring + Pinky curled)
-        elif is_index_ext and is_middle_ext and not is_ring_ext and not is_pinky_ext:
+        # Priority D: Three Fingers (Index + Middle + Ring extended, Pinky curled)
+        elif is_index_ext and is_middle_ext and is_ring_ext and not is_pinky_ext:
+            gesture = "Three Fingers"
+            
+        # Priority E: Peace / V-Sign (Index + Middle extended, Ring/Pinky curled)
+        elif is_index_ext and is_middle_ext and not (is_ring_ext and is_pinky_ext):
             gesture = "Peace"
             
-        # Priority E: Index Finger Only (Mouse Tracking)
-        elif is_index_ext and not is_middle_ext and not is_ring_ext and not is_pinky_ext:
+        # Priority F: Index Finger Only (Mouse Tracking)
+        elif is_index_ext and not is_middle_ext:
             gesture = "Index"
             
-        # Use palm center for Open Palm swipes for smoother displacement tracking
+        # Coordinates mapping for displacement tracking
         if gesture == "Open Palm":
-            cursor_x = middle_mcp.x
-            cursor_y = middle_mcp.y
+            cursor_x = (wrist.x + middle_mcp.x) / 2.0
+            cursor_y = (wrist.y + middle_mcp.y) / 2.0
+        elif gesture == "Three Fingers":
+            cursor_x = (index_tip.x + middle_tip.x + ring_tip.x) / 3.0
+            cursor_y = (index_tip.y + middle_tip.y + ring_tip.y) / 3.0
+        elif gesture == "Peace":
+            cursor_x = (index_tip.x + middle_tip.x) / 2.0
+            cursor_y = (index_tip.y + middle_tip.y) / 2.0
             
         return {
             "gesture": gesture,
