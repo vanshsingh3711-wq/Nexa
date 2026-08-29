@@ -37,11 +37,13 @@ class VoiceGuardrail:
     1. Strict Registered Command Recognition:
        Only parses registered lifecycle commands and actions.
        Silently ignores casual conversation, chatter, and background speech.
-    2. Duplicate Command Prevention:
+    2. Gesture Mode Lifecycle Control:
+       Allows toggling gesture mode (camera & tracking) ON/OFF via explicit voice commands.
+    3. Duplicate Command Prevention:
        Debounces repeated/duplicate command invocations within a configurable cooldown window.
-    3. Global Cooldown Protection:
+    4. Global Cooldown Protection:
        Prevents rapid-fire overlapping voice triggers from noisy audio chunks.
-    4. Anti-Echo Integration:
+    5. Anti-Echo Integration:
        Integrates with SpeechCoordinator to ensure complete silence during Nexa speech output.
     """
     def __init__(
@@ -77,18 +79,22 @@ class VoiceGuardrail:
             "nexa stop", "nexa sleep", "nexa close", "sleep", "deactivate nexa"
         ]
 
-        # 3. Gesture Enable
+        # 3. Gesture Enable (Explicit on-demand commands)
         self.gesture_enable_phrases = [
-            "enable gestures", "start gestures", "gesture mode on",
-            "gestures on", "enable gesture", "start gesture", "gesture on",
-            "start hand", "hand on", "start camera", "enable camera"
+            "turn on gestures", "turn on gesture", "enable gestures", "start gestures",
+            "gesture mode on", "gestures on", "enable gesture", "start gesture",
+            "gesture on", "turn on camera", "start camera", "enable camera",
+            "camera on", "start hand", "hand on", "hand mode on",
+            "turn on hand mode", "activate gestures", "activate gesture"
         ]
 
-        # 4. Gesture Disable
+        # 4. Gesture Disable (Explicit turn off commands)
         self.gesture_disable_phrases = [
-            "disable gestures", "stop gestures", "gesture mode off",
-            "gestures off", "disable gesture", "stop gesture", "gesture off",
-            "stop hand", "hand off", "stop camera", "disable camera"
+            "turn off gestures", "turn off gesture", "disable gestures", "stop gestures",
+            "gesture mode off", "gestures off", "disable gesture", "stop gesture",
+            "gesture off", "turn off camera", "stop camera", "disable camera",
+            "camera off", "stop hand", "hand off", "hand mode off",
+            "turn off hand mode", "deactivate gestures", "deactivate gesture"
         ]
 
         # 5. Registered Desktop Actions (Ordered from most specific to least specific)

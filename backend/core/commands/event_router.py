@@ -18,10 +18,10 @@ class EventRouter:
         action_router: Optional[ActionRouter] = None,
         feedback_service: Optional[FeedbackService] = None,
         gesture_manager: Optional[Any] = None,
-        start_active: bool = False,
+        start_active: bool = True,
     ):
-        self.is_active = False  # Gesture mode state (camera & tracking)
-        self.is_nexa_active = start_active  # Top-level Nexa active state (False = Sleep/Idle mode)
+        self.is_active = False  # Gesture mode state (camera & tracking, False by default)
+        self.is_nexa_active = start_active  # Top-level Nexa active state (True by default for voice control)
         self._is_closing = False
         
         self.action_router = action_router if action_router is not None else ActionRouter()
@@ -47,24 +47,24 @@ class EventRouter:
         self.peace_swipe_detector = SwipeDetector(history_size=15, swipe_threshold=0.075, time_window=0.5)
         self.swipe_detector = self.palm_swipe_detector # Backward compatibility
 
-    def wake_nexa(self, speak: bool = True, start_gestures: bool = True) -> bool:
+    def wake_nexa(self, speak: bool = True, start_gestures: bool = False) -> bool:
         """
         Wakes Nexa from Sleep/Idle mode.
-        Activates Nexa application state, starts gesture tracking & camera, and speaks welcome feedback.
-        Always answers verbally whenever the user commands wake up.
+        Activates Nexa application state and speaks welcome feedback.
+        Gestures remain inactive unless explicitly requested.
         """
         self.is_nexa_active = True
         self._is_closing = False
-        print(f"\n{'='*40}\n[Nexa] APPLICATION WOKEN UP & ACTIVATED\n{'='*40}\n")
+        print(f"\n{'='*40}\n[Nexa] APPLICATION WOKEN UP & ACTIVATED (Voice Ready)\n{'='*40}\n")
         
-        # Start gesture pipeline & camera on wake if attached
+        # Start gesture pipeline & camera ONLY if explicitly asked
         if start_gestures and self.gesture_manager:
             try:
                 self.gesture_manager.start(speak_feedback=False)
             except Exception as e:
                 print(f"[EventRouter] Error starting gesture manager on wake: {e}")
 
-        # Always speak welcome confirmation when commanded
+        # Speak welcome confirmation
         if speak and self.feedback_service:
             try:
                 self.feedback_service.handle_nexa_wake()
@@ -77,7 +77,6 @@ class EventRouter:
         Puts Nexa into Sleep/Idle mode:
         Speaks closing message, stops gesture subsystem & releases camera, sets is_nexa_active = False.
         The voice listener actively continues running in the background waiting for 'Wake up Nexa'.
-        Always answers verbally whenever the user commands close/sleep.
         """
         self._is_closing = True
         self.is_nexa_active = False
@@ -90,7 +89,7 @@ class EventRouter:
             except Exception as e:
                 print(f"[EventRouter] Error stopping gesture manager on close: {e}")
 
-        # 2. Always speak closing feedback asynchronously
+        # 2. Speak closing feedback asynchronously
         if speak and self.feedback_service:
             try:
                 self.feedback_service.handle_nexa_close(block=False)

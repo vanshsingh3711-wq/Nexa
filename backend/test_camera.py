@@ -6,13 +6,12 @@ from input.voice.voice_listener import VoiceListener
 from core.commands.event_router import EventRouter
 
 def main():
-    print("\n" + "="*55)
-    print("🚀 NEXA GESTURE & VOICE CONTROL SYSTEM")
-    print("="*55)
+    print("\n" + "="*58)
+    print("🚀 NEXA DESKTOP CONTROL SYSTEM (Voice & Gesture)")
+    print("="*58)
     
-    # Start initially in Sleep / Idle mode (Camera OFF)
-    # The user says "Wake up Nexa" to activate and turn on the camera!
-    router = EventRouter(start_active=False)
+    # 1. Initialize EventRouter with active voice control
+    router = EventRouter(start_active=True)
     
     last_frame_lock = threading.Lock()
     last_frame_info = {"frame": None, "gesture_data": None, "landmarks": None}
@@ -23,26 +22,32 @@ def main():
             last_frame_info["gesture_data"] = current_gesture_data
             last_frame_info["landmarks"] = landmarks
 
+    # 2. Gesture subsystem is INACTIVE by default (Camera OFF, 0% CPU)
     gesture_manager = GestureManager(
         event_router=router,
         on_frame_callback=on_frame
     )
     router.gesture_manager = gesture_manager
 
+    # 3. Voice listener is ACTIVE by default
     voice_listener = VoiceListener(
-        on_nexa_wake=lambda: router.wake_nexa(speak=True, start_gestures=True),
+        on_nexa_wake=lambda: router.wake_nexa(speak=True, start_gestures=False),
         on_nexa_close=lambda: router.close_nexa(speak=True),
         on_gesture_mode_change=lambda active, text: gesture_manager.start() if active else gesture_manager.stop(),
         on_command=lambda cmd: router.execute_action(cmd, source="voice")
     )
     voice_listener.start()
 
-    print("\n" + "-"*55)
-    print("😴 Nexa is currently in SLEEP / IDLE mode (Camera is OFF).")
-    print("🎤 Say 'Wake up Nexa' to start the camera and activate Nexa!")
-    print("🚪 Say 'Close Nexa' or 'Sleep' to turn off the camera & return to sleep.")
-    print("🛑 Press 'q' in the camera window or Ctrl+C in terminal to exit.")
-    print("-"*55 + "\n")
+    print("\n" + "-"*58)
+    print("🎤 Voice Listener: ACTIVE (Listening for commands right now)")
+    print("🖐️ Gesture Mode:   OFF by default (Camera Released / 0% CPU)")
+    print("\n🗣️ Voice Commands:")
+    print("  👉 Say 'Enable gestures' / 'Start camera'  -> Turns ON webcam & gestures")
+    print("  👉 Say 'Disable gestures' / 'Stop camera'  -> Turns OFF webcam & gestures")
+    print("  👉 Say Desktop Commands (Silent): 'Play', 'Pause', 'Volume up', 'Next tab', 'Screenshot'")
+    print("  👉 Say 'Close Nexa' / 'Sleep'              -> Puts Nexa into Sleep mode")
+    print("  🛑 Press Ctrl+C in terminal or 'q' in camera window to exit.")
+    print("-"*58 + "\n")
 
     cv2_window_open = False
 
@@ -63,7 +68,7 @@ def main():
 
                     color = (0, 255, 0)
                     cv2.rectangle(frame_to_show, (0, 0), (640, 90), (0, 0, 0), -1)
-                    cv2.putText(frame_to_show, "Nexa: ACTIVE | Camera: ON", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2)
+                    cv2.putText(frame_to_show, "Nexa: ACTIVE | Gestures: ON (Camera Active)", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.60, color, 2)
                     cv2.putText(frame_to_show, f"Gesture: {gesture_data['gesture']}", (15, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
 
                     if gesture_data["gesture"] in ("Index", "Pinch"):
@@ -81,7 +86,7 @@ def main():
                 else:
                     time.sleep(0.02)
             else:
-                # In Sleep mode: close camera window if it was open
+                # Gesture mode is OFF: destroy window if it was previously open
                 if cv2_window_open:
                     cv2.destroyAllWindows()
                     cv2_window_open = False
