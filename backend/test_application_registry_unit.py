@@ -222,16 +222,42 @@ class TestSecurityIntegration(unittest.TestCase):
 
 
     @patch("actions.system.browser_actions.pyautogui")
-    def test_action_router_executes_close_app(self, mock_pyautogui):
-        """Verify ActionRouter dispatches close_app successfully."""
+    def test_close_app_requires_confirmation_and_executes_on_confirm(self, mock_pyautogui):
+        """Verify close_app requires confirmation (CONFIRM_NEEDED) and only executes after explicit confirmation."""
         req = StructuredActionRequest(
             action="close_app",
             params={"target": "active"},
             source="voice"
         )
+        # 1. Initial Dispatch: must NOT execute, must return CONFIRM_NEEDED
         decision, output = self.router.dispatch(req)
-        self.assertEqual(decision.decision, PolicyDecision.ALLOW)
-        self.assertTrue(output)
+        self.assertEqual(decision.decision, PolicyDecision.CONFIRM_NEEDED)
+        self.assertIsNone(output)
+        self.assertIsNotNone(self.router.pending_request)
+        self.assertEqual(self.router.pending_request.action, "close_app")
+        mock_pyautogui.hotkey.assert_not_called()
+
+        # 2. Confirmation Step: executes pending action
+        result = self.router.confirm_pending()
+        self.assertTrue(result)
+        self.assertIsNone(self.router.pending_request)
+
+    @patch("actions.system.browser_actions.pyautogui")
+    def test_close_app_can_be_cancelled(self, mock_pyautogui):
+        """Verify close_app confirmation can be cancelled safely without executing."""
+        req = StructuredActionRequest(
+            action="close_app",
+            params={"target": "active"},
+            source="voice"
+        )
+        self.router.dispatch(req)
+        self.assertIsNotNone(self.router.pending_request)
+
+        # Cancel confirmation
+        cancelled = self.router.cancel_pending()
+        self.assertTrue(cancelled)
+        self.assertIsNone(self.router.pending_request)
+        mock_pyautogui.hotkey.assert_not_called()
 
 
 class TestVoiceGuardrailAppCommands(unittest.TestCase):
@@ -299,6 +325,20 @@ class TestVoiceGuardrailAppCommands(unittest.TestCase):
             self.assertEqual(match.intent_type, VoiceIntentType.REGISTERED_ACTION)
             self.assertEqual(match.action_name, "close_app")
             self.assertEqual(match.params.get("target"), expected_target)
+
+    def test_voice_commands_parse_confirmation_and_cancellation(self):
+        """Verify confirmation and cancellation voice commands parse correctly."""
+        confirm_phrases = ["confirm", "yes", "proceed", "do it", "confirm close", "yes close"]
+        for phrase in confirm_phrases:
+            match = self.guardrail.parse_command(phrase)
+            self.assertIsNotNone(match, f"Phrase '{phrase}' should match confirmation")
+            self.assertEqual(match.intent_type, VoiceIntentType.CONFIRM_ACTION)
+
+        cancel_phrases = ["cancel", "no", "don't close", "stop", "abort"]
+        for phrase in cancel_phrases:
+            match = self.guardrail.parse_command(phrase)
+            self.assertIsNotNone(match, f"Phrase '{phrase}' should match cancellation")
+            self.assertEqual(match.intent_type, VoiceIntentType.CANCEL_ACTION)
 
     def test_unregistered_app_voice_commands_ignored(self):
         """Verify requests to open unregistered apps are ignored by guardrail."""

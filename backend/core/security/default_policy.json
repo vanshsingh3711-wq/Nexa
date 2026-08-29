@@ -84,7 +84,7 @@
       "risk": "MEDIUM"
     },
     "close_app": {
-      "risk": "MEDIUM"
+      "risk": "HIGH"
     },
     "delete_file": {
       "risk": "HIGH"

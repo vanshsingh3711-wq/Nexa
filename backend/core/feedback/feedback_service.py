@@ -86,6 +86,41 @@ class FeedbackService:
         else:
             return self.handle_nexa_close(block=False)
 
+    def handle_confirmation_needed(self, action: str, target: Optional[str] = None) -> str:
+        """Asks the user for verbal confirmation before executing high-risk action."""
+        if action == "close_app":
+            target_str = f"{target}" if target and target != "active" else "the active application"
+            message = f"Are you sure you want to close {target_str}? Say confirm or yes to proceed."
+        else:
+            message = f"Are you sure you want to execute {action}? Say confirm or yes to proceed."
+            
+        with self._lock:
+            self._last_spoken_action = "confirm_needed"
+            self._last_spoken_time = time.time()
+
+        self.speech_service.speak(message)
+        return message
+
+    def handle_confirmation_cancelled(self) -> str:
+        """Verbally confirms action cancellation."""
+        message = "Cancelled."
+        with self._lock:
+            self._last_spoken_action = "action_cancelled"
+            self._last_spoken_time = time.time()
+
+        self.speech_service.speak(message)
+        return message
+
+    def handle_confirmation_confirmed(self) -> str:
+        """Verbally confirms proceeding with action."""
+        message = "Closing application."
+        with self._lock:
+            self._last_spoken_action = "action_confirmed"
+            self._last_spoken_time = time.time()
+
+        self.speech_service.speak(message)
+        return message
+
     def handle_action_success(
         self,
         action: str,

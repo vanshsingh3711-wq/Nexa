@@ -118,6 +118,16 @@ class EventRouter:
             source=source,
         )
         return self.action_router.dispatch(request)
+
+    def confirm_pending(self) -> Optional[Any]:
+        """Confirms and executes any pending high-risk action (e.g. close_app)."""
+        if not self.is_nexa_active:
+            return None
+        return self.action_router.confirm_pending()
+
+    def cancel_pending(self) -> bool:
+        """Cancels any pending high-risk action."""
+        return self.action_router.cancel_pending()
         
     def set_active(self, is_active: bool, speak: bool = False):
         """Enable or disable gesture control mode specifically."""

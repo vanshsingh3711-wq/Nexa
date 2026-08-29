@@ -264,9 +264,9 @@ def create_default_registry() -> ActionRegistry:
     # 4. Extended Example Actions for High-Risk & Target Operations
     registry.register(ActionDefinition(
         name="close_app",
-        description="Closes the active or specified application window",
+        description="Closes the active or specified application window (Requires confirmation)",
         param_schema=AppTargetParams,
-        default_risk=RiskLevel.MEDIUM,
+        default_risk=RiskLevel.HIGH,
         handler=close_app,
     ))
     registry.register(ActionDefinition(

@@ -71,14 +71,14 @@ class TestFeedbackSystem(unittest.TestCase):
         self.assertIsNone(output)
         self.mock_speech.speak.assert_not_called()
 
-    def test_confirm_needed_action_does_not_trigger_feedback(self):
-        """Verify that high-risk action requiring confirmation does NOT execute or speak."""
+    def test_confirm_needed_action_prompts_confirmation(self):
+        """Verify that high-risk action requiring confirmation does NOT execute handler and prompts for confirmation."""
         req = StructuredActionRequest(action="delete_file", params={"path": "test.txt"}, source="voice")
         decision, output = self.action_router.dispatch(req)
 
         self.assertEqual(decision.decision, PolicyDecision.CONFIRM_NEEDED)
         self.assertIsNone(output)
-        self.mock_speech.speak.assert_not_called()
+        self.mock_speech.speak.assert_called_once_with("Are you sure you want to execute delete_file? Say confirm or yes to proceed.")
 
     def test_action_handler_failure_does_not_claim_success(self):
         """Verify that an action handler throwing an exception does NOT speak success confirmation."""

@@ -11,6 +11,8 @@ class VoiceIntentType(str, Enum):
     LIFECYCLE_CLOSE = "LIFECYCLE_CLOSE"
     GESTURE_ENABLE = "GESTURE_ENABLE"
     GESTURE_DISABLE = "GESTURE_DISABLE"
+    CONFIRM_ACTION = "CONFIRM_ACTION"
+    CANCEL_ACTION = "CANCEL_ACTION"
     REGISTERED_ACTION = "REGISTERED_ACTION"
     UNKNOWN = "UNKNOWN"
 
@@ -106,7 +108,20 @@ class VoiceGuardrail:
             "turn off hand mode", "deactivate gestures", "deactivate gesture"
         ]
 
-        # 5. Registered Desktop Actions (Ordered from most specific to least specific)
+        # 5. Confirmation Actions (for HIGH risk operations like close_app)
+        self.confirm_phrases = [
+            "confirm", "yes", "proceed", "do it", "confirm action", "confirm close",
+            "confirm closing", "yes close", "yes close it", "yes close app", "yes close application",
+            "yes please", "sure"
+        ]
+
+        # 6. Cancellation Actions
+        self.cancel_phrases = [
+            "cancel", "cancel action", "cancel close", "don't close", "dont close",
+            "no", "stop", "abort", "don't do it", "dont do it", "no don't", "no dont"
+        ]
+
+        # 7. Registered Desktop Actions (Ordered from most specific to least specific)
         self.action_commands: List[Tuple[str, str]] = [
             # Media Controls
             ("toggle play pause", "toggle_play_pause"),
@@ -214,8 +229,10 @@ class VoiceGuardrail:
         """Cleans and normalizes recognized audio text."""
         if not text:
             return ""
+        # Remove apostrophes first so "don't" becomes "dont"
+        cleaned = text.lower().replace("'", "").replace("’", "")
         # Remove punctuation, convert to lowercase, normalize whitespace
-        cleaned = re.sub(r"[^\w\s]", " ", text.lower())
+        cleaned = re.sub(r"[^\w\s]", " ", cleaned)
         return " ".join(cleaned.split())
 
     def _is_word_boundary_match(self, phrase: str, text: str) -> bool:
@@ -362,12 +379,30 @@ class VoiceGuardrail:
                     raw_text=raw_text
                 )
 
-        # 5. Check Precise Volume Controls
+        # 5. Check Action Confirmation (e.g. 'confirm', 'yes', 'proceed')
+        for phrase in self.confirm_phrases:
+            if self._is_word_boundary_match(phrase, norm_text):
+                return VoiceCommandMatch(
+                    intent_type=VoiceIntentType.CONFIRM_ACTION,
+                    matched_phrase=phrase,
+                    raw_text=raw_text
+                )
+
+        # 6. Check Action Cancellation (e.g. 'cancel', 'don't close', 'no')
+        for phrase in self.cancel_phrases:
+            if self._is_word_boundary_match(phrase, norm_text):
+                return VoiceCommandMatch(
+                    intent_type=VoiceIntentType.CANCEL_ACTION,
+                    matched_phrase=phrase,
+                    raw_text=raw_text
+                )
+
+        # 7. Check Precise Volume Controls
         volume_match = self._parse_volume_command(norm_text, raw_text)
         if volume_match is not None:
             return volume_match
 
-        # 6. Check Registered Desktop Actions
+        # 8. Check Registered Desktop Actions
         for phrase, action_name in self.action_commands:
             if self._is_word_boundary_match(phrase, norm_text):
                 return VoiceCommandMatch(
@@ -377,7 +412,7 @@ class VoiceGuardrail:
                     raw_text=raw_text
                 )
 
-        # 7. Check Allowlisted Application Launch Commands (e.g. 'open vs code', 'launch chrome', 'open notepad')
+        # 9. Check Allowlisted Application Launch Commands (e.g. 'open vs code', 'launch chrome', 'open notepad')
         app_match = self._parse_application_command(norm_text, raw_text)
         if app_match is not None:
             return app_match

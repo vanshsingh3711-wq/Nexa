@@ -1,6 +1,6 @@
 import threading
 import time
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict, Any
 import numpy as np
 
 try:
@@ -31,7 +31,9 @@ class VoiceListener:
         on_nexa_wake: Optional[Callable[[], None]] = None,
         on_nexa_close: Optional[Callable[[], None]] = None,
         on_gesture_mode_change: Optional[Callable[[bool, str], None]] = None,
-        on_command: Optional[Callable[[str], None]] = None,
+        on_command: Optional[Callable[[str, Optional[Dict[str, Any]]], None]] = None,
+        on_confirm: Optional[Callable[[], None]] = None,
+        on_cancel: Optional[Callable[[], None]] = None,
         speech_coordinator: Optional[SpeechCoordinator] = None,
         guardrail: Optional[VoiceGuardrail] = None,
         on_mode_change: Optional[Callable[[bool, str], None]] = None, # backward compatibility
@@ -40,6 +42,8 @@ class VoiceListener:
         self.on_nexa_close = on_nexa_close
         self.on_gesture_mode_change = on_gesture_mode_change if on_gesture_mode_change is not None else on_mode_change
         self.on_command = on_command
+        self.on_confirm = on_confirm
+        self.on_cancel = on_cancel
         self.speech_coordinator = speech_coordinator if speech_coordinator is not None else get_speech_coordinator()
         self.guardrail = guardrail if guardrail is not None else VoiceGuardrail()
         
@@ -189,6 +193,16 @@ class VoiceListener:
                 print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: ENABLE GESTURES (Matched: '{match.matched_phrase}')\n{'='*48}\n")
                 if self.on_gesture_mode_change:
                     self.on_gesture_mode_change(True, raw_text)
+
+            elif intent == VoiceIntentType.CONFIRM_ACTION:
+                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: CONFIRM ACTION (Matched: '{match.matched_phrase}')\n{'='*48}\n")
+                if self.on_confirm:
+                    self.on_confirm()
+
+            elif intent == VoiceIntentType.CANCEL_ACTION:
+                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: CANCEL ACTION (Matched: '{match.matched_phrase}')\n{'='*48}\n")
+                if self.on_cancel:
+                    self.on_cancel()
 
             elif intent == VoiceIntentType.REGISTERED_ACTION and match.action_name:
                 param_str = f" {match.params}" if match.params else ""
