@@ -80,6 +80,9 @@
     },
 
 
+    "open_application": {
+      "risk": "MEDIUM"
+    },
     "close_app": {
       "risk": "MEDIUM"
     },

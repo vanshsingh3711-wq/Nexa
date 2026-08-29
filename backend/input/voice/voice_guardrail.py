@@ -4,6 +4,8 @@ import threading
 from typing import Optional, Dict, List, Tuple, Any
 from enum import Enum
 
+from core.applications.registry import ApplicationRegistry, get_default_application_registry
+
 class VoiceIntentType(str, Enum):
     LIFECYCLE_WAKE = "LIFECYCLE_WAKE"
     LIFECYCLE_CLOSE = "LIFECYCLE_CLOSE"
@@ -56,12 +58,14 @@ class VoiceGuardrail:
         default_debounce_sec: float = 1.5,
         volume_debounce_sec: float = 0.35,
         global_min_interval_sec: float = 0.3,
-        max_words_in_command: int = 7
+        max_words_in_command: int = 7,
+        app_registry: Optional[ApplicationRegistry] = None,
     ):
         self.default_debounce_sec = default_debounce_sec
         self.volume_debounce_sec = volume_debounce_sec
         self.global_min_interval_sec = global_min_interval_sec
         self.max_words_in_command = max_words_in_command
+        self.app_registry = app_registry if app_registry is not None else get_default_application_registry()
         
         self._lock = threading.Lock()
         self._last_command_time: Dict[str, float] = {}
@@ -343,7 +347,35 @@ class VoiceGuardrail:
                     raw_text=raw_text
                 )
 
+        # 7. Check Allowlisted Application Launch Commands (e.g. 'open vs code', 'launch chrome', 'open notepad')
+        app_match = self._parse_application_command(norm_text, raw_text)
+        if app_match is not None:
+            return app_match
+
         # Unrecognized speech / casual conversation -> safely ignored
+        return None
+
+    def _parse_application_command(self, norm_text: str, raw_text: str) -> Optional[VoiceCommandMatch]:
+        """
+        Parses application opening voice intents (e.g. 'open vs code', 'launch chrome', 'open notepad').
+        Resolves strictly against the ApplicationRegistry allowlist. Returns None if app is not registered.
+        """
+        m = re.match(r"^(?:open|launch|start)\s+(.+)$", norm_text)
+        if m:
+            target = m.group(1).strip()
+            # Strip common filler words
+            target_cleaned = re.sub(r"^(?:the|my)\s+", "", target)
+            target_cleaned = re.sub(r"\s+(?:app|application|ide|browser|editor)$", "", target_cleaned).strip()
+
+            app_def = self.app_registry.resolve(target_cleaned) or self.app_registry.resolve(target)
+            if app_def:
+                return VoiceCommandMatch(
+                    intent_type=VoiceIntentType.REGISTERED_ACTION,
+                    action_name="open_application",
+                    params={"app_id": app_def.app_id},
+                    matched_phrase=raw_text,
+                    raw_text=raw_text
+                )
         return None
 
     def should_execute(self, match: VoiceCommandMatch) -> Tuple[bool, Optional[str]]:

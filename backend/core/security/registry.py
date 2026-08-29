@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from core.security.models import (
     RiskLevel,
     EmptyParams,
+    OpenApplicationParams,
     VolumeSetParams,
     VolumeAdjustParams,
     MouseMoveParams,
@@ -10,6 +11,7 @@ from core.security.models import (
     AppTargetParams,
     FileTargetParams,
 )
+from core.applications.launcher import get_application_launcher
 from actions.mouse.mouse_actions import move_mouse, left_click, double_click, scroll
 from actions.media.media_actions import toggle_play_pause, media_play, media_pause
 from actions.media.volume_actions import volume_up, volume_down, volume_mute, set_volume
@@ -245,6 +247,19 @@ def create_default_registry() -> ActionRegistry:
     ))
 
 
+
+    def _handle_open_application(app_id: str) -> Dict[str, Any]:
+        launcher = get_application_launcher()
+        res = launcher.launch(app_id)
+        return res.model_dump()
+
+    registry.register(ActionDefinition(
+        name="open_application",
+        description="Securely launches an allowlisted desktop application by app_id or alias",
+        param_schema=OpenApplicationParams,
+        default_risk=RiskLevel.MEDIUM,
+        handler=_handle_open_application,
+    ))
 
     # 4. Extended Example Actions for High-Risk & Target Operations
     registry.register(ActionDefinition(

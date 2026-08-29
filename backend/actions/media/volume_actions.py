@@ -19,6 +19,7 @@ def _get_volume_endpoint():
     try:
         speakers = AudioUtilities.GetSpeakers()
         if speakers is not None:
+            
             return speakers.EndpointVolume
     except Exception as e:
         print(f"[Volume] Error getting audio endpoint: {e}")

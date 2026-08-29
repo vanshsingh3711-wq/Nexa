@@ -23,6 +23,10 @@ class EmptyParams(StrictBaseModel):
     """Schema for actions requiring zero parameters."""
     pass
 
+class OpenApplicationParams(StrictBaseModel):
+    """Schema for launching an allowlisted application."""
+    app_id: str = Field(..., min_length=1, description="Registered application identifier or alias (e.g. 'vscode', 'chrome')")
+
 class VolumeSetParams(StrictBaseModel):
     """Schema for setting exact volume level (0 to 100)."""
     level: int = Field(50, ge=0, le=100, description="Target volume percentage (0 to 100)")
