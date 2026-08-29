@@ -112,7 +112,8 @@ class ActionRouter:
 
         if self.feedback_service is not None:
             try:
-                self.feedback_service.handle_confirmation_confirmed()
+                target = req.params.get("target") if req.params else None
+                self.feedback_service.handle_confirmation_confirmed(target=target)
             except Exception:
                 pass
 

@@ -243,21 +243,25 @@ class TestSecurityIntegration(unittest.TestCase):
         self.assertIsNone(self.router.pending_request)
 
     @patch("actions.system.browser_actions.pyautogui")
-    def test_close_app_can_be_cancelled(self, mock_pyautogui):
-        """Verify close_app confirmation can be cancelled safely without executing."""
+    def test_close_named_app_asks_confirmation_with_app_name(self, mock_pyautogui):
+        """Verify close_app for 'chrome' asks confirmation containing 'Chrome application'."""
+        mock_speech = MagicMock()
+        self.router.feedback_service.speech_service = mock_speech
+        
         req = StructuredActionRequest(
             action="close_app",
-            params={"target": "active"},
+            params={"target": "chrome"},
             source="voice"
         )
-        self.router.dispatch(req)
-        self.assertIsNotNone(self.router.pending_request)
+        decision, output = self.router.dispatch(req)
+        self.assertEqual(decision.decision, PolicyDecision.CONFIRM_NEEDED)
+        mock_speech.speak.assert_called_once_with(
+            "Are you sure you want to close Chrome application? Say confirm or yes to proceed."
+        )
 
-        # Cancel confirmation
-        cancelled = self.router.cancel_pending()
-        self.assertTrue(cancelled)
-        self.assertIsNone(self.router.pending_request)
-        mock_pyautogui.hotkey.assert_not_called()
+        # Confirm closing Chrome
+        self.router.confirm_pending()
+        mock_speech.speak.assert_called_with("Closing Chrome application.")
 
 
 class TestVoiceGuardrailAppCommands(unittest.TestCase):
