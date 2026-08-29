@@ -34,7 +34,7 @@ def main():
         on_nexa_wake=lambda: router.wake_nexa(speak=True, start_gestures=False),
         on_nexa_close=lambda: router.close_nexa(speak=True),
         on_gesture_mode_change=lambda active, text: gesture_manager.start() if active else gesture_manager.stop(),
-        on_command=lambda cmd: router.execute_action(cmd, source="voice")
+        on_command=lambda cmd, params=None: router.execute_action(cmd, params=params, source="voice")
     )
     voice_listener.start()
 

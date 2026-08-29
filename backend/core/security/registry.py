@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from core.security.models import (
     RiskLevel,
     EmptyParams,
+    VolumeSetParams,
+    VolumeAdjustParams,
     MouseMoveParams,
     ScrollParams,
     AppTargetParams,
@@ -10,7 +12,7 @@ from core.security.models import (
 )
 from actions.mouse.mouse_actions import move_mouse, left_click, double_click, scroll
 from actions.media.media_actions import toggle_play_pause, media_play, media_pause
-from actions.media.volume_actions import volume_up, volume_down, volume_mute
+from actions.media.volume_actions import volume_up, volume_down, volume_mute, set_volume
 from actions.system.browser_actions import (
     browser_back, browser_forward, next_tab, prev_tab,
     zoom_in, zoom_out, reset_zoom, take_screenshot,
@@ -115,16 +117,23 @@ def create_default_registry() -> ActionRegistry:
     registry.register(ActionDefinition(
         name="volume_up",
         description="Increments system audio volume",
-        param_schema=EmptyParams,
+        param_schema=VolumeAdjustParams,
         default_risk=RiskLevel.LOW,
         handler=volume_up,
     ))
     registry.register(ActionDefinition(
         name="volume_down",
         description="Decrements system audio volume",
-        param_schema=EmptyParams,
+        param_schema=VolumeAdjustParams,
         default_risk=RiskLevel.LOW,
         handler=volume_down,
+    ))
+    registry.register(ActionDefinition(
+        name="set_volume",
+        description="Sets system audio volume to a specific target level (0-100)",
+        param_schema=VolumeSetParams,
+        default_risk=RiskLevel.LOW,
+        handler=set_volume,
     ))
     registry.register(ActionDefinition(
         name="volume_mute",

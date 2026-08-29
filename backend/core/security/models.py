@@ -23,6 +23,14 @@ class EmptyParams(StrictBaseModel):
     """Schema for actions requiring zero parameters."""
     pass
 
+class VolumeSetParams(StrictBaseModel):
+    """Schema for setting exact volume level (0 to 100)."""
+    level: int = Field(50, ge=0, le=100, description="Target volume percentage (0 to 100)")
+
+class VolumeAdjustParams(StrictBaseModel):
+    """Schema for adjusting volume by a specific delta step."""
+    step: Optional[int] = Field(default=5, ge=1, le=100, description="Volume step delta percentage (1 to 100)")
+
 class MouseMoveParams(StrictBaseModel):
     """Schema for cursor movement."""
     norm_x: float = Field(..., ge=0.0, le=1.0, description="Normalized X coordinate (0.0 to 1.0)")

@@ -95,6 +95,39 @@ class TestVoiceGuardrail(unittest.TestCase):
             self.assertEqual(match.intent_type, VoiceIntentType.REGISTERED_ACTION)
             self.assertEqual(match.action_name, expected_action)
 
+    def test_precise_volume_commands(self):
+        """Verify absolute target volume and delta step voice commands parse correctly with params."""
+        # 1. Target absolute volume
+        abs_cases = [
+            ("volume down to 45", "set_volume", {"level": 45}),
+            ("volume up to 80", "set_volume", {"level": 80}),
+            ("set volume to 60", "set_volume", {"level": 60}),
+            ("set volume 50 percent", "set_volume", {"level": 50}),
+            ("volume to 25", "set_volume", {"level": 25}),
+            ("volume 75 percent", "set_volume", {"level": 75}),
+        ]
+        for phrase, expected_act, expected_params in abs_cases:
+            match = self.guardrail.parse_command(phrase)
+            self.assertIsNotNone(match, f"Phrase '{phrase}' should match")
+            self.assertEqual(match.action_name, expected_act)
+            self.assertEqual(match.params, expected_params)
+
+        # 2. Relative delta volume
+        rel_cases = [
+            ("volume up by 100", "volume_up", {"step": 100}),
+            ("volume up by 20", "volume_up", {"step": 20}),
+            ("increase volume by 15", "volume_up", {"step": 15}),
+            ("volume down by 30", "volume_down", {"step": 30}),
+            ("decrease volume by 25", "volume_down", {"step": 25}),
+            ("volume up", "volume_up", {"step": 5}),
+            ("volume down", "volume_down", {"step": 5}),
+        ]
+        for phrase, expected_act, expected_params in rel_cases:
+            match = self.guardrail.parse_command(phrase)
+            self.assertIsNotNone(match, f"Phrase '{phrase}' should match")
+            self.assertEqual(match.action_name, expected_act)
+            self.assertEqual(match.params, expected_params)
+
     def test_duplicate_command_prevention_and_debounce(self):
         """Verify identical commands in rapid succession are blocked by debounce guardrail."""
         match_wake = self.guardrail.parse_command("wake up nexa")

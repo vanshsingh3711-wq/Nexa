@@ -1,7 +1,7 @@
 import time
 import re
 import threading
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
 from enum import Enum
 
 class VoiceIntentType(str, Enum):
@@ -18,16 +18,18 @@ class VoiceCommandMatch:
         self,
         intent_type: VoiceIntentType,
         action_name: Optional[str] = None,
+        params: Optional[Dict[str, Any]] = None,
         matched_phrase: str = "",
         raw_text: str = ""
     ):
         self.intent_type = intent_type
         self.action_name = action_name
+        self.params = params or {}
         self.matched_phrase = matched_phrase
         self.raw_text = raw_text
 
     def __repr__(self):
-        return f"<VoiceCommandMatch intent={self.intent_type.value} action={self.action_name} phrase='{self.matched_phrase}'>"
+        return f"<VoiceCommandMatch intent={self.intent_type.value} action={self.action_name} params={self.params} phrase='{self.matched_phrase}'>"
 
 class VoiceGuardrail:
     """
@@ -37,13 +39,16 @@ class VoiceGuardrail:
     1. Strict Registered Command Recognition:
        Only parses registered lifecycle commands and actions.
        Silently ignores casual conversation, chatter, and background speech.
-    2. Gesture Mode Lifecycle Control:
+    2. Precise Volume Voice Control:
+       Supports exact volume targets ("volume down to 45", "set volume to 60")
+       and delta step adjustments ("volume up by 100", "decrease volume by 20").
+    3. Gesture Mode Lifecycle Control:
        Allows toggling gesture mode (camera & tracking) ON/OFF via explicit voice commands.
-    3. Duplicate Command Prevention:
+    4. Duplicate Command Prevention:
        Debounces repeated/duplicate command invocations within a configurable cooldown window.
-    4. Global Cooldown Protection:
+    5. Global Cooldown Protection:
        Prevents rapid-fire overlapping voice triggers from noisy audio chunks.
-    5. Anti-Echo Integration:
+    6. Anti-Echo Integration:
        Integrates with SpeechCoordinator to ensure complete silence during Nexa speech output.
     """
     def __init__(
@@ -104,10 +109,6 @@ class VoiceGuardrail:
             ("toggle play", "toggle_play_pause"),
             ("toggle pause", "toggle_play_pause"),
             ("play pause", "toggle_play_pause"),
-            ("increase volume", "volume_up"),
-            ("volume up", "volume_up"),
-            ("decrease volume", "volume_down"),
-            ("volume down", "volume_down"),
             ("toggle mute", "volume_mute"),
             ("unmute", "volume_mute"),
             ("mute", "volume_mute"),
@@ -188,6 +189,93 @@ class VoiceGuardrail:
         pattern = r"\b" + re.escape(phrase) + r"\b"
         return bool(re.search(pattern, text))
 
+    def _parse_volume_command(self, norm_text: str, raw_text: str) -> Optional[VoiceCommandMatch]:
+        """
+        Parses precise volume commands including:
+        - Target absolute volume: 'volume down to 45', 'volume up to 80', 'set volume to 50', 'volume to 45', 'volume 50 percent'
+        - Relative volume UP: 'volume up by 100', 'increase volume by 20', 'volume up 20'
+        - Relative volume DOWN: 'volume down by 30', 'decrease volume by 25', 'volume down 30'
+        - Default step volume: 'volume up', 'volume down'
+        """
+        # 1. Target Absolute Volume (e.g. 'volume down to 45', 'volume up to 80', 'set volume to 60', 'volume to 45')
+        m_abs = re.search(
+            r"\b(?:(?:set|change|turn|adjust)?\s*volume\s*(?:down|up)?\s*to|set\s*(?:the\s*)?volume\s*(?:to)?)\s*(\d{1,3})\s*(?:%|percent)?\b",
+            norm_text
+        )
+        if m_abs:
+            val = int(m_abs.group(1))
+            return VoiceCommandMatch(
+                intent_type=VoiceIntentType.REGISTERED_ACTION,
+                action_name="set_volume",
+                params={"level": max(0, min(100, val))},
+                matched_phrase=m_abs.group(0),
+                raw_text=raw_text
+            )
+
+        # 2. Target Absolute Volume ('volume 70 percent', 'set volume 50')
+        m_abs2 = re.search(r"\b(?:set\s*)?volume\s*(\d{1,3})\s*(?:%|percent)\b", norm_text)
+        if m_abs2:
+            val = int(m_abs2.group(1))
+            return VoiceCommandMatch(
+                intent_type=VoiceIntentType.REGISTERED_ACTION,
+                action_name="set_volume",
+                params={"level": max(0, min(100, val))},
+                matched_phrase=m_abs2.group(0),
+                raw_text=raw_text
+            )
+
+        # 3. Relative Volume UP by delta (e.g. 'volume up by 100', 'increase volume by 20', 'volume up 20')
+        m_up = re.search(
+            r"\b(?:volume\s*up|increase\s*volume|turn\s*up\s*(?:the\s*)?volume|raise\s*volume)\s*(?:by\s*)?(\d{1,3})\s*(?:%|percent)?\b",
+            norm_text
+        )
+        if m_up:
+            val = int(m_up.group(1))
+            return VoiceCommandMatch(
+                intent_type=VoiceIntentType.REGISTERED_ACTION,
+                action_name="volume_up",
+                params={"step": max(1, min(100, val))},
+                matched_phrase=m_up.group(0),
+                raw_text=raw_text
+            )
+
+        # 4. Relative Volume DOWN by delta (e.g. 'volume down by 30', 'decrease volume by 15', 'volume down 30')
+        m_down = re.search(
+            r"\b(?:volume\s*down|decrease\s*volume|turn\s*down\s*(?:the\s*)?volume|lower\s*volume)\s*(?:by\s*)?(\d{1,3})\s*(?:%|percent)?\b",
+            norm_text
+        )
+        if m_down:
+            val = int(m_down.group(1))
+            return VoiceCommandMatch(
+                intent_type=VoiceIntentType.REGISTERED_ACTION,
+                action_name="volume_down",
+                params={"step": max(1, min(100, val))},
+                matched_phrase=m_down.group(0),
+                raw_text=raw_text
+            )
+
+        # 5. Default Discrete Volume UP ('volume up', 'increase volume')
+        if any(self._is_word_boundary_match(p, norm_text) for p in ["volume up", "increase volume", "turn up volume", "raise volume"]):
+            return VoiceCommandMatch(
+                intent_type=VoiceIntentType.REGISTERED_ACTION,
+                action_name="volume_up",
+                params={"step": 5},
+                matched_phrase="volume up",
+                raw_text=raw_text
+            )
+
+        # 6. Default Discrete Volume DOWN ('volume down', 'decrease volume')
+        if any(self._is_word_boundary_match(p, norm_text) for p in ["volume down", "decrease volume", "turn down volume", "lower volume"]):
+            return VoiceCommandMatch(
+                intent_type=VoiceIntentType.REGISTERED_ACTION,
+                action_name="volume_down",
+                params={"step": 5},
+                matched_phrase="volume down",
+                raw_text=raw_text
+            )
+
+        return None
+
     def parse_command(self, raw_text: str) -> Optional[VoiceCommandMatch]:
         """
         Parses recognized speech text strictly against registered commands.
@@ -240,7 +328,12 @@ class VoiceGuardrail:
                     raw_text=raw_text
                 )
 
-        # 5. Check Registered Desktop Actions
+        # 5. Check Precise Volume Controls
+        volume_match = self._parse_volume_command(norm_text, raw_text)
+        if volume_match is not None:
+            return volume_match
+
+        # 6. Check Registered Desktop Actions
         for phrase, action_name in self.action_commands:
             if self._is_word_boundary_match(phrase, norm_text):
                 return VoiceCommandMatch(
@@ -265,7 +358,7 @@ class VoiceGuardrail:
             last_time = self._last_command_time.get(cmd_key, 0.0)
 
             # Determine cooldown period for this command
-            if match.action_name in ("volume_up", "volume_down"):
+            if match.action_name in ("volume_up", "volume_down", "set_volume"):
                 cooldown = self.volume_debounce_sec
             else:
                 cooldown = self.default_debounce_sec

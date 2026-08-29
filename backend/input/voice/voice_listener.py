@@ -191,9 +191,13 @@ class VoiceListener:
                     self.on_gesture_mode_change(True, raw_text)
 
             elif intent == VoiceIntentType.REGISTERED_ACTION and match.action_name:
-                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: EXECUTING -> {match.action_name.upper()} (Matched: '{match.matched_phrase}')\n{'='*48}\n")
+                param_str = f" {match.params}" if match.params else ""
+                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: EXECUTING -> {match.action_name.upper()}{param_str} (Matched: '{match.matched_phrase}')\n{'='*48}\n")
                 if self.on_command:
-                    self.on_command(match.action_name)
+                    try:
+                        self.on_command(match.action_name, match.params)
+                    except TypeError:
+                        self.on_command(match.action_name)
 
         except sr.UnknownValueError:
             pass

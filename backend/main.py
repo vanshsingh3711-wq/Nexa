@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
         on_nexa_wake=lambda: router.wake_nexa(),
         on_nexa_close=lambda: router.close_nexa(cleanup_fn=lambda: (voice_listener.stop(), gesture_manager.stop())),
         on_gesture_mode_change=lambda active, text: gesture_manager.start() if active else gesture_manager.stop(),
-        on_command=lambda cmd: router.execute_action(cmd, source="voice")
+        on_command=lambda cmd, params=None: router.execute_action(cmd, params=params, source="voice")
     )
     voice_listener.start()
     

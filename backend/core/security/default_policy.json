@@ -32,6 +32,9 @@
     "volume_mute": {
       "risk": "LOW"
     },
+    "set_volume": {
+      "risk": "LOW"
+    },
 
     "browser_back": {
       "risk": "LOW"
