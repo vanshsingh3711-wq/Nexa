@@ -1,5 +1,6 @@
 import threading
 import time
+from typing import Optional, Callable
 import numpy as np
 
 try:
@@ -12,18 +13,41 @@ try:
 except ImportError:
     sr = None
 
+from core.feedback.coordinator import SpeechCoordinator, get_speech_coordinator
+from input.voice.voice_guardrail import VoiceGuardrail, VoiceIntentType, VoiceCommandMatch
+
 class VoiceListener:
-    def __init__(self, on_mode_change=None, sample_rate=16000):
-        """
-        Listens for voice commands like 'Start Nexa' / 'Stop Nexa' or 'Mode On' / 'Mode Off'
-        using a lightweight background audio stream and speech recognition.
-        """
-        self.on_mode_change = on_mode_change  # Callback func(is_active: bool, command_text: str)
-        self.sample_rate = sample_rate
-        self.recognizer = sr.Recognizer() if sr else None
+    """
+    Continuous background voice listener with strict command intent parsing and duplicate prevention guardrails.
+    
+    Features:
+    - Only recognizes registered commands (Lifecycle events & Whitelisted Desktop Actions).
+    - Silently ignores casual conversation, chatter, and background speech.
+    - Prevents duplicate command execution within a configurable debounce window.
+    - Anti-Echo: Ignores incoming microphone audio while Nexa is speaking TTS.
+    """
+    def __init__(
+        self,
+        on_nexa_wake: Optional[Callable[[], None]] = None,
+        on_nexa_close: Optional[Callable[[], None]] = None,
+        on_gesture_mode_change: Optional[Callable[[bool, str], None]] = None,
+        on_command: Optional[Callable[[str], None]] = None,
+        speech_coordinator: Optional[SpeechCoordinator] = None,
+        guardrail: Optional[VoiceGuardrail] = None,
+        on_mode_change: Optional[Callable[[bool, str], None]] = None, # backward compatibility
+    ):
+        self.on_nexa_wake = on_nexa_wake
+        self.on_nexa_close = on_nexa_close
+        self.on_gesture_mode_change = on_gesture_mode_change if on_gesture_mode_change is not None else on_mode_change
+        self.on_command = on_command
+        self.speech_coordinator = speech_coordinator if speech_coordinator is not None else get_speech_coordinator()
+        self.guardrail = guardrail if guardrail is not None else VoiceGuardrail()
+        
         self.is_running = False
         self.thread = None
-        self.energy_threshold = 40.0
+        self.recognizer = sr.Recognizer() if sr else None
+        self.sample_rate = 16000
+        self.energy_threshold = 300.0  # Dynamic calibration baseline
 
     def start(self):
         """Start listening in a background daemon thread."""
@@ -40,8 +64,18 @@ class VoiceListener:
         self.thread = threading.Thread(target=self._listen_loop, daemon=True)
         self.thread.start()
         print("\n=== VOICE LISTENER INITIALIZED ===")
-        print("🎤 Say 'Start Nexa' or 'Mode On' to activate gesture controls.")
-        print("🎤 Say 'Stop Nexa' or 'Mode Off' to deactivate.\n")
+        print("🛡️ Guardrail Active: Casual conversation is automatically filtered out.")
+        print("🌟 Lifecycle Commands:")
+        print("   - 'Wake up Nexa' / 'Wake Nexa' / 'Start Nexa'")
+        print("   - 'Close Nexa' / 'Sleep' / 'Go to sleep'")
+        print("🖐️ Gesture Lifecycle Commands:")
+        print("   - 'Enable gestures' / 'Start gestures' / 'Gesture mode on'")
+        print("   - 'Disable gestures' / 'Stop gestures' / 'Gesture mode off'")
+        print("🌐 Desktop Voice Commands (Silent execution):")
+        print("   - Media: 'Play', 'Pause', 'Play pause', 'Volume up', 'Volume down', 'Mute'")
+        print("   - Browser: 'Go back', 'Go forward', 'Next tab', 'Previous tab', 'Close tab', 'Refresh page'")
+        print("   - Window: 'Open task view', 'Next window', 'Previous window', 'Select'")
+        print("   - System: 'Zoom in', 'Zoom out', 'Reset zoom', 'Take screenshot'\n")
 
     def stop(self):
         """Stop listening."""
@@ -61,7 +95,7 @@ class VoiceListener:
         
         try:
             with sd.InputStream(samplerate=self.sample_rate, channels=1, dtype='int16') as stream:
-                # 1. Quick ambient noise calibration for 0.5s
+                # 1. Ambient noise calibration for 0.5s
                 calibration_samples = []
                 for _ in range(5):
                     data, _ = stream.read(chunk_samples)
@@ -74,6 +108,14 @@ class VoiceListener:
                 # 2. Continuous listening stream
                 while self.is_running:
                     data, overflowed = stream.read(chunk_samples)
+
+                    # Discard mic audio when Nexa is speaking or in cooldown window
+                    if self.speech_coordinator and self.speech_coordinator.is_voice_blocked():
+                        is_speaking = False
+                        silence_start_time = None
+                        audio_buffer = []
+                        continue
+
                     samples = data.flatten()
                     rms = np.sqrt(np.mean(samples.astype(np.float64)**2))
                     
@@ -81,7 +123,6 @@ class VoiceListener:
                         if not is_speaking:
                             is_speaking = True
                             audio_buffer = []
-                            # print("[Voice] Hearing voice...")
                         silence_start_time = None
                         audio_buffer.append(data.tobytes())
                     elif is_speaking:
@@ -103,72 +144,58 @@ class VoiceListener:
     def _process_audio(self, pcm_bytes):
         if not self.recognizer or not sr:
             return
+
+        if self.speech_coordinator and self.speech_coordinator.is_voice_blocked():
+            return
             
         try:
             audio_data = sr.AudioData(pcm_bytes, self.sample_rate, 2)
-            text = self.recognizer.recognize_google(audio_data).lower().strip()
-            print(f"[Voice] Recognized: '{text}'")
+            raw_text = self.recognizer.recognize_google(audio_data).lower().strip()
+
+            if self.speech_coordinator and self.speech_coordinator.is_voice_blocked():
+                return
+
+            # 1. Guardrail: Strict Intent Parsing (Filters out casual conversation)
+            match = self.guardrail.parse_command(raw_text)
+            if match is None:
+                # Silently ignore casual chatter / unregistered phrases
+                return
+
+            # 2. Guardrail: Duplicate Command & Rate Limiting Check
+            allowed, block_reason = self.guardrail.should_execute(match)
+            if not allowed:
+                print(f"[Voice Guardrail] {block_reason}")
+                return
+
+            # 3. Authorized Command Dispatching
+            intent = match.intent_type
             
-            # Simple & comprehensive activation phrases
-            activation_phrases = [
-                "start nexa",
-                "nexa start",
-                "nexa on",
-                "mode on",
-                "turn on",
-                "start hand",
-                "hand on",
-                "start",
-                "activate",
-                "enable",
-                "hand gesture mode on",
-                "gesture mode on",
-                "gesture on",
-                "hand mode on",
-                "start gesture",
-                "start next",
-                "next on",
-                "nexus on",
-                "nexus start",
-                "alexa on",
-                "kesar mode on"
-            ]
-            
-            # Simple & comprehensive deactivation phrases
-            deactivation_phrases = [
-                "stop nexa",
-                "nexa stop",
-                "nexa off",
-                "mode off",
-                "turn off",
-                "stop hand",
-                "hand off",
-                "stop",
-                "deactivate",
-                "disable",
-                "hand gesture mode off",
-                "gesture mode off",
-                "gesture off",
-                "hand mode off",
-                "stop gesture",
-                "stop next",
-                "next off",
-                "kesar mode off"
-            ]
-            
-            # Check deactivation first so "stop" takes priority if both match
-            if any(phrase in text for phrase in deactivation_phrases):
-                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: DEACTIVATING GESTURE MODE\n{'='*48}\n")
-                if self.on_mode_change:
-                    self.on_mode_change(False, text)
-                    
-            elif any(phrase in text for phrase in activation_phrases):
-                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: ACTIVATING GESTURE MODE\n{'='*48}\n")
-                if self.on_mode_change:
-                    self.on_mode_change(True, text)
-                    
+            if intent == VoiceIntentType.LIFECYCLE_CLOSE:
+                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: CLOSE / SLEEP NEXA (Matched: '{match.matched_phrase}')\n{'='*48}\n")
+                if self.on_nexa_close:
+                    self.on_nexa_close()
+
+            elif intent == VoiceIntentType.LIFECYCLE_WAKE:
+                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: WAKE NEXA (Matched: '{match.matched_phrase}')\n{'='*48}\n")
+                if self.on_nexa_wake:
+                    self.on_nexa_wake()
+
+            elif intent == VoiceIntentType.GESTURE_DISABLE:
+                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: DISABLE GESTURES (Matched: '{match.matched_phrase}')\n{'='*48}\n")
+                if self.on_gesture_mode_change:
+                    self.on_gesture_mode_change(False, raw_text)
+
+            elif intent == VoiceIntentType.GESTURE_ENABLE:
+                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: ENABLE GESTURES (Matched: '{match.matched_phrase}')\n{'='*48}\n")
+                if self.on_gesture_mode_change:
+                    self.on_gesture_mode_change(True, raw_text)
+
+            elif intent == VoiceIntentType.REGISTERED_ACTION and match.action_name:
+                print(f"\n{'='*48}\n[Nexa] VOICE COMMAND: EXECUTING -> {match.action_name.upper()} (Matched: '{match.matched_phrase}')\n{'='*48}\n")
+                if self.on_command:
+                    self.on_command(match.action_name)
+
         except sr.UnknownValueError:
-            # print("[Voice] (Speech was not clear)")
             pass
         except sr.RequestError as e:
             print(f"[VoiceListener] Speech recognition network error: {e}")

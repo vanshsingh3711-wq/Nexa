@@ -13,3 +13,9 @@ def volume_down():
     if pyautogui: 
         print("Media: Volume DOWN")
         pyautogui.press('volumedown')
+
+def volume_mute():
+    if pyautogui:
+        print("Media: MUTE / UNMUTE")
+        pyautogui.press('volumemute')
+

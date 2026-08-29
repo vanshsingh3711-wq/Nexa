@@ -17,12 +17,22 @@
     "toggle_play_pause": {
       "risk": "LOW"
     },
+    "media_play": {
+      "risk": "LOW"
+    },
+    "media_pause": {
+      "risk": "LOW"
+    },
     "volume_up": {
       "risk": "LOW"
     },
     "volume_down": {
       "risk": "LOW"
     },
+    "volume_mute": {
+      "risk": "LOW"
+    },
+
     "browser_back": {
       "risk": "LOW"
     },
@@ -35,8 +45,17 @@
     "prev_tab": {
       "risk": "LOW"
     },
+    "zoom_in": {
+      "risk": "LOW"
+    },
     "zoom_out": {
       "risk": "LOW"
+    },
+    "reset_zoom": {
+      "risk": "LOW"
+    },
+    "take_screenshot": {
+      "risk": "MEDIUM"
     },
     "open_task_view": {
       "risk": "LOW"
@@ -53,6 +72,11 @@
     "close_tab": {
       "risk": "MEDIUM"
     },
+    "refresh_page": {
+      "risk": "LOW"
+    },
+
+
     "close_app": {
       "risk": "MEDIUM"
     },

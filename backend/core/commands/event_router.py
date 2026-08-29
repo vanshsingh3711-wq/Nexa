@@ -1,18 +1,32 @@
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 
 from input.gesture.swipe_detector import SwipeDetector
 from core.security.models import StructuredActionRequest
 from core.commands.action_router import ActionRouter
+from core.feedback.feedback_service import FeedbackService, get_feedback_service
 
 class EventRouter:
     """
     Translates stable gesture inputs into StructuredActionRequests and
     routes them through the PolicyChecker security boundary via ActionRouter.
+    
+    Also manages top-level Nexa application lifecycle state (Active, Sleep/Idle, Closing).
     """
-    def __init__(self, action_router: Optional[ActionRouter] = None):
-        self.is_active = False
+    def __init__(
+        self,
+        action_router: Optional[ActionRouter] = None,
+        feedback_service: Optional[FeedbackService] = None,
+        gesture_manager: Optional[Any] = None,
+        start_active: bool = False,
+    ):
+        self.is_active = False  # Gesture mode state (camera & tracking)
+        self.is_nexa_active = start_active  # Top-level Nexa active state (False = Sleep/Idle mode)
+        self._is_closing = False
+        
         self.action_router = action_router if action_router is not None else ActionRouter()
+        self.feedback_service = feedback_service if feedback_service is not None else get_feedback_service()
+        self.gesture_manager = gesture_manager
         
         # Dedicated debounce timestamps for each action type
         self.last_toggle_time = 0.0
@@ -33,8 +47,72 @@ class EventRouter:
         self.peace_swipe_detector = SwipeDetector(history_size=15, swipe_threshold=0.075, time_window=0.5)
         self.swipe_detector = self.palm_swipe_detector # Backward compatibility
 
+    def wake_nexa(self, speak: bool = True, start_gestures: bool = True) -> bool:
+        """
+        Wakes Nexa from Sleep/Idle mode.
+        Activates Nexa application state, starts gesture tracking & camera, and speaks welcome feedback.
+        Always answers verbally whenever the user commands wake up.
+        """
+        self.is_nexa_active = True
+        self._is_closing = False
+        print(f"\n{'='*40}\n[Nexa] APPLICATION WOKEN UP & ACTIVATED\n{'='*40}\n")
+        
+        # Start gesture pipeline & camera on wake if attached
+        if start_gestures and self.gesture_manager:
+            try:
+                self.gesture_manager.start(speak_feedback=False)
+            except Exception as e:
+                print(f"[EventRouter] Error starting gesture manager on wake: {e}")
+
+        # Always speak welcome confirmation when commanded
+        if speak and self.feedback_service:
+            try:
+                self.feedback_service.handle_nexa_wake()
+            except Exception as e:
+                print(f"[EventRouter] Feedback error on wake: {e}")
+        return True
+
+    def close_nexa(self, cleanup_fn: Optional[Callable[[], None]] = None, speak: bool = True) -> bool:
+        """
+        Puts Nexa into Sleep/Idle mode:
+        Speaks closing message, stops gesture subsystem & releases camera, sets is_nexa_active = False.
+        The voice listener actively continues running in the background waiting for 'Wake up Nexa'.
+        Always answers verbally whenever the user commands close/sleep.
+        """
+        self._is_closing = True
+        self.is_nexa_active = False
+        print(f"\n{'='*40}\n[Nexa] ENTERING SLEEP / IDLE MODE (Camera Released, Voice Active)\n{'='*40}\n")
+        
+        # 1. Stop gesture subsystem & release camera hardware immediately
+        if self.gesture_manager:
+            try:
+                self.gesture_manager.stop(speak_feedback=False)
+            except Exception as e:
+                print(f"[EventRouter] Error stopping gesture manager on close: {e}")
+
+        # 2. Always speak closing feedback asynchronously
+        if speak and self.feedback_service:
+            try:
+                self.feedback_service.handle_nexa_close(block=False)
+            except Exception as e:
+                print(f"[EventRouter] Feedback error on close: {e}")
+
+        # 3. Optional hook
+        if cleanup_fn:
+            try:
+                cleanup_fn()
+            except Exception as e:
+                print(f"[EventRouter] Error in cleanup callback: {e}")
+
+        self._is_closing = False
+        return True
+
     def execute_action(self, action: str, params: Optional[Dict[str, Any]] = None, source: str = "gesture"):
         """Creates a StructuredActionRequest and submits it through the PolicyChecker."""
+        if not self.is_nexa_active:
+            print(f"[EventRouter] Ignoring '{action}': Nexa is in Sleep mode (Say 'Wake up Nexa' to activate).")
+            return None, None
+            
         request = StructuredActionRequest(
             action=action,
             params=params or {},
@@ -42,8 +120,9 @@ class EventRouter:
         )
         return self.action_router.dispatch(request)
         
-    def set_active(self, is_active: bool):
-        """Enable or disable gesture control mode (e.g. via voice command)."""
+    def set_active(self, is_active: bool, speak: bool = False):
+        """Enable or disable gesture control mode specifically."""
+        previous_active = self.is_active
         self.is_active = is_active
         self.tab_selection_mode = False
         status = "ACTIVATED (Controlling PC)" if self.is_active else "DEACTIVATED (Idle)"
@@ -53,13 +132,20 @@ class EventRouter:
             self.three_finger_swipe_detector.clear()
             self.peace_swipe_detector.clear()
 
+        # Verbal feedback on gesture state transition if explicitly requested
+        if speak and self.feedback_service and (previous_active != is_active):
+            try:
+                self.feedback_service.handle_gesture_lifecycle(is_active)
+            except Exception as e:
+                print(f"[EventRouter] Feedback error on gesture mode change: {e}")
+
     def dispatch(self, gesture_data, previous_gesture_data):
         gesture = gesture_data.get("gesture", "None")
         previous_gesture = previous_gesture_data.get("gesture", "None")
         current_time = time.time()
             
-        # If we are in Idle mode, do not process any controls
-        if not self.is_active:
+        # If we are in Idle mode or Nexa is not active, do not process any controls
+        if not self.is_active or not self.is_nexa_active:
             self.palm_swipe_detector.clear()
             self.three_finger_swipe_detector.clear()
             self.peace_swipe_detector.clear()

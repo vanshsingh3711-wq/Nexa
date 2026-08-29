@@ -9,12 +9,16 @@ from core.security.models import (
     FileTargetParams,
 )
 from actions.mouse.mouse_actions import move_mouse, left_click, double_click, scroll
-from actions.media.media_actions import toggle_play_pause
-from actions.media.volume_actions import volume_up, volume_down
+from actions.media.media_actions import toggle_play_pause, media_play, media_pause
+from actions.media.volume_actions import volume_up, volume_down, volume_mute
 from actions.system.browser_actions import (
-    browser_back, browser_forward, next_tab, prev_tab, zoom_out, close_tab,
-    open_task_view, select_next_window, select_prev_window, confirm_selection
+    browser_back, browser_forward, next_tab, prev_tab,
+    zoom_in, zoom_out, reset_zoom, take_screenshot,
+    close_tab, refresh_page, open_task_view, select_next_window, select_prev_window, confirm_selection
 )
+
+
+
 
 class ActionDefinition(BaseModel):
     """
@@ -95,6 +99,20 @@ def create_default_registry() -> ActionRegistry:
         handler=toggle_play_pause,
     ))
     registry.register(ActionDefinition(
+        name="media_play",
+        description="Plays system media playback",
+        param_schema=EmptyParams,
+        default_risk=RiskLevel.LOW,
+        handler=media_play,
+    ))
+    registry.register(ActionDefinition(
+        name="media_pause",
+        description="Pauses system media playback",
+        param_schema=EmptyParams,
+        default_risk=RiskLevel.LOW,
+        handler=media_pause,
+    ))
+    registry.register(ActionDefinition(
         name="volume_up",
         description="Increments system audio volume",
         param_schema=EmptyParams,
@@ -108,6 +126,14 @@ def create_default_registry() -> ActionRegistry:
         default_risk=RiskLevel.LOW,
         handler=volume_down,
     ))
+    registry.register(ActionDefinition(
+        name="volume_mute",
+        description="Toggles system audio mute / unmute",
+        param_schema=EmptyParams,
+        default_risk=RiskLevel.LOW,
+        handler=volume_mute,
+    ))
+
 
     # 3. Browser & Navigation Actions (LOW / MEDIUM risk)
     registry.register(ActionDefinition(
@@ -139,11 +165,32 @@ def create_default_registry() -> ActionRegistry:
         handler=prev_tab,
     ))
     registry.register(ActionDefinition(
+        name="zoom_in",
+        description="Increases zoom level in browser or active app",
+        param_schema=EmptyParams,
+        default_risk=RiskLevel.LOW,
+        handler=zoom_in,
+    ))
+    registry.register(ActionDefinition(
         name="zoom_out",
-        description="Decreases zoom level in browser",
+        description="Decreases zoom level in browser or active app",
         param_schema=EmptyParams,
         default_risk=RiskLevel.LOW,
         handler=zoom_out,
+    ))
+    registry.register(ActionDefinition(
+        name="reset_zoom",
+        description="Resets zoom level to default (100%) in browser or active app",
+        param_schema=EmptyParams,
+        default_risk=RiskLevel.LOW,
+        handler=reset_zoom,
+    ))
+    registry.register(ActionDefinition(
+        name="take_screenshot",
+        description="Captures and saves a full screen screenshot to Pictures/Screenshots",
+        param_schema=EmptyParams,
+        default_risk=RiskLevel.MEDIUM,
+        handler=take_screenshot,
     ))
     registry.register(ActionDefinition(
         name="open_task_view",
@@ -180,6 +227,15 @@ def create_default_registry() -> ActionRegistry:
         default_risk=RiskLevel.MEDIUM,
         handler=close_tab,
     ))
+    registry.register(ActionDefinition(
+        name="refresh_page",
+        description="Refreshes or reloads the active browser web page",
+        param_schema=EmptyParams,
+        default_risk=RiskLevel.LOW,
+        handler=refresh_page,
+    ))
+
+
 
     # 4. Extended Example Actions for High-Risk & Target Operations
     registry.register(ActionDefinition(
