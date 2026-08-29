@@ -136,9 +136,15 @@ class VoiceGuardrail:
 
             # System / Utilities
             ("take a screenshot", "take_screenshot"),
+            ("take a screen shot", "take_screenshot"),
             ("take screenshot", "take_screenshot"),
+            ("take screen shot", "take_screenshot"),
+            ("capture screenshot", "take_screenshot"),
             ("capture screen", "take_screenshot"),
+            ("save screenshot", "take_screenshot"),
+            ("screen capture", "take_screenshot"),
             ("screenshot", "take_screenshot"),
+            ("screen shot", "take_screenshot"),
             ("reset zoom", "reset_zoom"),
             ("default zoom", "reset_zoom"),
             ("normal zoom", "reset_zoom"),

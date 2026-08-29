@@ -1,9 +1,11 @@
 import os
 import time
+import ctypes
 from pathlib import Path
 
 try:
     import pyautogui
+    pyautogui.FAILSAFE = False  # Avoid crashing when gesture moves mouse to corner (0, 0)
 except ImportError:
     pyautogui = None
 
@@ -44,8 +46,32 @@ def reset_zoom():
 
 
 def take_screenshot():
+    r"""
+    Captures a full-screen screenshot on Windows.
+    1. Uses native Windows keyboard event (Win + PrtScn) which automatically saves to Pictures\Screenshots.
+    2. Falls back to pyautogui.screenshot() / hotkeys if applicable.
+    """
+    print("System: TAKE SCREENSHOT")
+    
+    # 1. Trigger native Windows OS Win + PrintScreen (0x5B + 0x2C)
+    try:
+        VK_LWIN = 0x5B
+        VK_SNAPSHOT = 0x2C
+        KEYEVENTF_KEYUP = 0x0002
+
+        user32 = ctypes.windll.user32
+        user32.keybd_event(VK_LWIN, 0, 0, 0)
+        user32.keybd_event(VK_SNAPSHOT, 0, 0, 0)
+        time.sleep(0.05)
+        user32.keybd_event(VK_SNAPSHOT, 0, KEYEVENTF_KEYUP, 0)
+        user32.keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0)
+        print("[Nexa] Screenshot captured via Windows Win+PrtScn (Saved to Pictures\\Screenshots)")
+        return "screenshot_captured"
+    except Exception as e:
+        print(f"[Nexa] Native keybd_event error: {e}")
+
+    # 2. Secondary fallback via PyAutoGUI if available
     if pyautogui:
-        print("System: TAKE SCREENSHOT")
         try:
             save_dir = Path.home() / "Pictures" / "Screenshots"
             save_dir.mkdir(parents=True, exist_ok=True)
@@ -56,8 +82,11 @@ def take_screenshot():
             print(f"[Nexa] Screenshot saved to: {filepath}")
             return str(filepath)
         except Exception as e:
-            print(f"[Nexa] Screenshot direct save error ({e}), triggering Win+PrtScn")
-            pyautogui.hotkey('win', 'printscreen')
+            print(f"[Nexa] PyAutoGUI screenshot error: {e}")
+            try:
+                pyautogui.hotkey('win', 'printscreen')
+            except Exception:
+                pass
 
 
 def close_tab():
