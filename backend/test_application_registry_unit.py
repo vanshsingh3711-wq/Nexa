@@ -221,6 +221,19 @@ class TestSecurityIntegration(unittest.TestCase):
         self.assertEqual(output.get("app_id"), "notepad")
 
 
+    @patch("actions.system.browser_actions.pyautogui")
+    def test_action_router_executes_close_app(self, mock_pyautogui):
+        """Verify ActionRouter dispatches close_app successfully."""
+        req = StructuredActionRequest(
+            action="close_app",
+            params={"target": "active"},
+            source="voice"
+        )
+        decision, output = self.router.dispatch(req)
+        self.assertEqual(decision.decision, PolicyDecision.ALLOW)
+        self.assertTrue(output)
+
+
 class TestVoiceGuardrailAppCommands(unittest.TestCase):
     def setUp(self):
         self.guardrail = VoiceGuardrail()
@@ -247,6 +260,45 @@ class TestVoiceGuardrailAppCommands(unittest.TestCase):
             self.assertEqual(match.intent_type, VoiceIntentType.REGISTERED_ACTION)
             self.assertEqual(match.action_name, "open_application")
             self.assertEqual(match.params, {"app_id": expected_app_id})
+
+    def test_voice_commands_parse_close_active_app(self):
+        """Verify voice phrases to close active application and window match close_app."""
+        close_phrases = [
+            "close app",
+            "close active app",
+            "close current app",
+            "close application",
+            "close active application",
+            "close window",
+            "close active window",
+            "close current window",
+            "close this window",
+            "close this app",
+            "close this",
+            "exit app",
+            "exit window",
+        ]
+        for phrase in close_phrases:
+            match = self.guardrail.parse_command(phrase)
+            self.assertIsNotNone(match, f"Phrase '{phrase}' should match close_app")
+            self.assertEqual(match.intent_type, VoiceIntentType.REGISTERED_ACTION)
+            self.assertEqual(match.action_name, "close_app")
+
+    def test_voice_commands_parse_close_named_app(self):
+        """Verify 'close <app>' for allowlisted apps matches close_app with target param."""
+        named_cases = [
+            ("close chrome", "chrome"),
+            ("close vs code", "vscode"),
+            ("close notepad", "notepad"),
+            ("close brave", "brave"),
+            ("close file explorer", "file_explorer"),
+        ]
+        for phrase, expected_target in named_cases:
+            match = self.guardrail.parse_command(phrase)
+            self.assertIsNotNone(match, f"Phrase '{phrase}' should match close_app for '{expected_target}'")
+            self.assertEqual(match.intent_type, VoiceIntentType.REGISTERED_ACTION)
+            self.assertEqual(match.action_name, "close_app")
+            self.assertEqual(match.params.get("target"), expected_target)
 
     def test_unregistered_app_voice_commands_ignored(self):
         """Verify requests to open unregistered apps are ignored by guardrail."""

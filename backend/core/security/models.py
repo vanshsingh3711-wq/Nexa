@@ -46,7 +46,7 @@ class ScrollParams(StrictBaseModel):
 
 class AppTargetParams(StrictBaseModel):
     """Schema for application/window targeting actions."""
-    target: str = Field(..., min_length=1, description="Application or window identifier")
+    target: Optional[str] = Field(default="active", min_length=1, description="Application or window identifier (defaults to 'active')")
 
 class FileTargetParams(StrictBaseModel):
     """Schema for file operation targeting."""

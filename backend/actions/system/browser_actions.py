@@ -1,6 +1,7 @@
 import os
 import time
 import ctypes
+from typing import Optional
 from pathlib import Path
 
 try:
@@ -93,6 +94,25 @@ def close_tab():
     if pyautogui:
         print("Browser: CLOSE TAB")
         pyautogui.hotkey('ctrl', 'w')
+
+def close_app(target: Optional[str] = "active"):
+    """
+    Closes the currently active foreground application window.
+    Sends Windows WM_CLOSE to foreground window and triggers Alt + F4.
+    """
+    print(f"System: CLOSE APPLICATION (Target: {target or 'active'})")
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        if hwnd:
+            WM_CLOSE = 0x0010
+            user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+    except Exception as e:
+        print(f"[System] Error sending WM_CLOSE: {e}")
+
+    if pyautogui:
+        pyautogui.hotkey('alt', 'f4')
+    return True
 
 def refresh_page():
     if pyautogui:

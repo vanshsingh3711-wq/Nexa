@@ -18,7 +18,7 @@ from actions.media.volume_actions import volume_up, volume_down, volume_mute, se
 from actions.system.browser_actions import (
     browser_back, browser_forward, next_tab, prev_tab,
     zoom_in, zoom_out, reset_zoom, take_screenshot,
-    close_tab, refresh_page, open_task_view, select_next_window, select_prev_window, confirm_selection
+    close_tab, close_app, refresh_page, open_task_view, select_next_window, select_prev_window, confirm_selection
 )
 
 
@@ -264,10 +264,10 @@ def create_default_registry() -> ActionRegistry:
     # 4. Extended Example Actions for High-Risk & Target Operations
     registry.register(ActionDefinition(
         name="close_app",
-        description="Closes a specific application window by target identifier",
+        description="Closes the active or specified application window",
         param_schema=AppTargetParams,
         default_risk=RiskLevel.MEDIUM,
-        handler=None,
+        handler=close_app,
     ))
     registry.register(ActionDefinition(
         name="delete_file",

@@ -178,6 +178,36 @@ class VoiceGuardrail:
             ("browser back", "browser_back"),
             ("back page", "browser_back"),
             ("go back", "browser_back"),
+
+            # Window & Active Application Closing
+            ("close the active application", "close_app"),
+            ("close active application", "close_app"),
+            ("close the active app", "close_app"),
+            ("close active app", "close_app"),
+            ("close the current application", "close_app"),
+            ("close current application", "close_app"),
+            ("close the current app", "close_app"),
+            ("close current app", "close_app"),
+            ("close the active window", "close_app"),
+            ("close active window", "close_app"),
+            ("close the current window", "close_app"),
+            ("close current window", "close_app"),
+            ("close this window", "close_app"),
+            ("close this app", "close_app"),
+            ("close the window", "close_app"),
+            ("close window", "close_app"),
+            ("close the application", "close_app"),
+            ("close application", "close_app"),
+            ("close the app", "close_app"),
+            ("close app", "close_app"),
+            ("close this", "close_app"),
+            ("exit active application", "close_app"),
+            ("exit active app", "close_app"),
+            ("exit current app", "close_app"),
+            ("exit the app", "close_app"),
+            ("exit app", "close_app"),
+            ("exit application", "close_app"),
+            ("exit window", "close_app"),
         ]
 
     def _normalize_text(self, text: str) -> str:
@@ -376,6 +406,25 @@ class VoiceGuardrail:
                     matched_phrase=raw_text,
                     raw_text=raw_text
                 )
+
+        # 2. Check 'close <app>' or 'exit <app>' for allowlisted apps (e.g. 'close chrome', 'close vs code')
+        m_close = re.match(r"^(?:close|exit)\s+(.+)$", norm_text)
+        if m_close:
+            target = m_close.group(1).strip()
+            # If target is generic keyword, it's handled by lifecycle or action_commands
+            generic_keywords = ("nexa", "tab", "current tab", "app", "application", "window", "active app", "active window", "current app", "current window", "this", "this app", "this window")
+            if target not in generic_keywords:
+                target_cleaned = re.sub(r"^(?:the|my)\s+", "", target)
+                target_cleaned = re.sub(r"\s+(?:app|application|ide|browser|editor)$", "", target_cleaned).strip()
+                app_def = self.app_registry.resolve(target_cleaned) or self.app_registry.resolve(target)
+                if app_def:
+                    return VoiceCommandMatch(
+                        intent_type=VoiceIntentType.REGISTERED_ACTION,
+                        action_name="close_app",
+                        params={"target": app_def.app_id},
+                        matched_phrase=raw_text,
+                        raw_text=raw_text
+                    )
         return None
 
     def should_execute(self, match: VoiceCommandMatch) -> Tuple[bool, Optional[str]]:
