@@ -35,6 +35,7 @@ class EventRouter:
         self.last_media_time = 0.0
         self.last_volume_time = 0.0
         self.last_swipe_time = 0.0
+        self.last_action_timestamp = 0.0
         
         # Tab / Window selection session tracking
         self.tab_selection_mode = False
@@ -112,6 +113,7 @@ class EventRouter:
             print(f"[EventRouter] Ignoring '{action}': Nexa is in Sleep mode (Say 'Wake up Nexa' to activate).")
             return None, None
             
+        self.last_action_timestamp = time.time()
         request = StructuredActionRequest(
             action=action,
             params=params or {},
@@ -216,6 +218,7 @@ class EventRouter:
                     self.execute_action("open_task_view")
                     self.tab_selection_mode = True
                     self.last_tab_selection_time = current_time
+                    self.last_media_time = current_time
                     
         # B. Three Fingers: Swipe Left -> Browser Back, Swipe Right -> Browser Forward
         elif gesture == "Three Fingers":
@@ -226,10 +229,12 @@ class EventRouter:
                         print(f"\n--- 3-FINGER SWIPE LEFT (BROWSER BACK) ---\n")
                         self.last_swipe_time = current_time
                         self.execute_action("browser_back")
+                        self.last_media_time = current_time
                     elif swipe_dir == "Swipe Right":
                         print(f"\n--- 3-FINGER SWIPE RIGHT (BROWSER FORWARD) ---\n")
                         self.last_swipe_time = current_time
                         self.execute_action("browser_forward")
+                        self.last_media_time = current_time
                         
         # C. Peace Sign (2 Fingers): Tab / Window Navigation
         #    Right -> Next Tab/Window, Left -> Previous Tab/Window

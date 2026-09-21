@@ -18,11 +18,11 @@ class TestSelectiveLifecycleFeedback(unittest.TestCase):
         self.event_router = EventRouter(feedback_service=self.feedback_service, start_active=False)
 
     def test_1_wake_nexa_speaks_welcome(self):
-        """Test 1: Wake command activates Nexa and speaks 'Welcome, Vansh. How can I help you?' every time."""
+        """Test 1: Wake command activates Nexa and speaks 'Welcome, Master. How can I help you?' every time."""
         res1 = self.event_router.wake_nexa(speak=True)
         self.assertTrue(res1)
         self.assertTrue(self.event_router.is_nexa_active)
-        self.mock_speech_service.speak.assert_called_with("Welcome, Vansh. How can I help you?")
+        self.mock_speech_service.speak.assert_called_with("Welcome, Master. How can I help you?")
 
         # Calling wake again confirms verbally every time
         res2 = self.event_router.wake_nexa(speak=True)

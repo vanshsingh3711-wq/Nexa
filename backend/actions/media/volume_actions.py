@@ -1,8 +1,12 @@
 import os
+import sys
 from typing import Optional
 
 try:
-    from pycaw.pycaw import AudioUtilities
+    if sys.platform == "win32":
+        from pycaw.pycaw import AudioUtilities
+    else:
+        AudioUtilities = None
 except ImportError:
     AudioUtilities = None
 

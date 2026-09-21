@@ -1,11 +1,19 @@
 import time
 import queue
+import sys
 import threading
+import tempfile
+import os
+import subprocess
 from typing import Optional
 
 try:
-    import win32com.client
-    import pythoncom
+    if sys.platform == "win32":
+        import win32com.client
+        import pythoncom
+    else:
+        win32com = None
+        pythoncom = None
 except ImportError:
     win32com = None
     pythoncom = None
@@ -102,14 +110,41 @@ class SpeechService:
                 print(f"[Nexa Speech] Speaking: \"{text}\"")
 
                 # 2. Output speech via native SAPI or fallback
-                if speaker is not None:
-                    if hasattr(speaker, "Speak"):
-                        speaker.Speak(text)
-                    elif hasattr(speaker, "say"):
-                        speaker.say(text)
-                        speaker.runAndWait()
+                if sys.platform != "win32":
+                    try:
+                        from gtts import gTTS
+                        tts = gTTS(text=text, lang='en', tld='co.uk') # Female British/Google voice
+                        
+                        fd, temp_path = tempfile.mkstemp(suffix=".mp3")
+                        os.close(fd)
+                        
+                        tts.save(temp_path)
+                        
+                        # Play using ffplay (usually available on Linux Mint)
+                        subprocess.run(["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", "-af", "atempo=1.2", temp_path], check=False)
+                        
+                        try:
+                            os.remove(temp_path)
+                        except:
+                            pass
+                            
+                    except Exception as e:
+                        print(f"[Nexa Speech] gTTS Error: {e}, falling back to pyttsx3")
+                        if speaker is not None:
+                            if hasattr(speaker, "Speak"):
+                                speaker.Speak(text)
+                            elif hasattr(speaker, "say"):
+                                speaker.say(text)
+                                speaker.runAndWait()
                 else:
-                    time.sleep(0.1)
+                    if speaker is not None:
+                        if hasattr(speaker, "Speak"):
+                            speaker.Speak(text)
+                        elif hasattr(speaker, "say"):
+                            speaker.say(text)
+                            speaker.runAndWait()
+                    else:
+                        time.sleep(0.1)
             except Exception as e:
                 print(f"[SpeechService] Error during TTS synthesis: {e}")
             finally:

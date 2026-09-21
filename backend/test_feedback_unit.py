@@ -1,4 +1,4 @@
-import time
+soeimport time
 import unittest
 from unittest.mock import MagicMock
 
@@ -145,7 +145,7 @@ class TestFeedbackSystem(unittest.TestCase):
     def test_lifecycle_feedback_methods(self):
         """Verify direct feedback service lifecycle handlers."""
         self.feedback_service.handle_nexa_wake()
-        self.mock_speech.speak.assert_called_with("Welcome, Vansh. How can I help you?")
+        self.mock_speech.speak.assert_called_with("Welcome, Master. How can I help you?")
 
         self.feedback_service.handle_nexa_close(block=True)
         self.mock_speech.speak.assert_called_with("Alright, closing Nexa.", block=True)

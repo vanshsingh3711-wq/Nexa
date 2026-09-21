@@ -92,7 +92,10 @@ def get_default_application_registry() -> ApplicationRegistry:
             aliases=["chrome", "google chrome", "google chrome browser", "chrome browser"],
             strategy_type=LaunchStrategyType.DISCOVERABLE_EXECUTABLE,
             executable_candidates=[
+                "google-chrome",
+                "google-chrome-stable",
                 "chrome.exe",
+                "/var/lib/flatpak/exports/bin/com.google.Chrome",
                 r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe",
                 r"%PROGRAMFILES(X86)%\Google\Chrome\Application\chrome.exe",
                 r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"
@@ -107,7 +110,10 @@ def get_default_application_registry() -> ApplicationRegistry:
             aliases=["brave", "brave browser"],
             strategy_type=LaunchStrategyType.DISCOVERABLE_EXECUTABLE,
             executable_candidates=[
+                "brave-browser",
+                "brave",
                 "brave.exe",
+                "/var/lib/flatpak/exports/bin/com.brave.Browser",
                 r"%PROGRAMFILES%\BraveSoftware\Brave-Browser\Application\brave.exe",
                 r"%PROGRAMFILES(X86)%\BraveSoftware\Brave-Browser\Application\brave.exe",
                 r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe"
@@ -122,8 +128,10 @@ def get_default_application_registry() -> ApplicationRegistry:
             aliases=["vscode", "vs code", "visual studio code", "code"],
             strategy_type=LaunchStrategyType.DISCOVERABLE_EXECUTABLE,
             executable_candidates=[
+                "code",
                 "code.cmd",
                 "code.exe",
+                "/var/lib/flatpak/exports/bin/com.visualstudio.code",
                 r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe",
                 r"%PROGRAMFILES%\Microsoft VS Code\Code.exe",
                 r"%PROGRAMFILES(X86)%\Microsoft VS Code\Code.exe"
@@ -154,6 +162,8 @@ def get_default_application_registry() -> ApplicationRegistry:
             aliases=["file explorer", "explorer", "files", "my computer", "this pc", "folder", "folders", "file manager"],
             strategy_type=LaunchStrategyType.SHELL_TARGET,
             executable_candidates=[
+                "nemo",
+                "nautilus",
                 "explorer.exe",
                 r"%WINDIR%\explorer.exe"
             ],
@@ -167,6 +177,8 @@ def get_default_application_registry() -> ApplicationRegistry:
             aliases=["notepad", "text editor", "notes", "note pad"],
             strategy_type=LaunchStrategyType.SYSTEM_PATH,
             executable_candidates=[
+                "xed",
+                "gedit",
                 "notepad.exe",
                 r"%WINDIR%\notepad.exe",
                 r"%WINDIR%\System32\notepad.exe"

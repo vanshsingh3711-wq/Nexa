@@ -1,5 +1,6 @@
 import os
 import time
+import sys
 import ctypes
 from typing import Optional
 from pathlib import Path
@@ -56,18 +57,19 @@ def take_screenshot():
     
     # 1. Trigger native Windows OS Win + PrintScreen (0x5B + 0x2C)
     try:
-        VK_LWIN = 0x5B
-        VK_SNAPSHOT = 0x2C
-        KEYEVENTF_KEYUP = 0x0002
+        if sys.platform == "win32":
+            VK_LWIN = 0x5B
+            VK_SNAPSHOT = 0x2C
+            KEYEVENTF_KEYUP = 0x0002
 
-        user32 = ctypes.windll.user32
-        user32.keybd_event(VK_LWIN, 0, 0, 0)
-        user32.keybd_event(VK_SNAPSHOT, 0, 0, 0)
-        time.sleep(0.05)
-        user32.keybd_event(VK_SNAPSHOT, 0, KEYEVENTF_KEYUP, 0)
-        user32.keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0)
-        print("[Nexa] Screenshot captured via Windows Win+PrtScn (Saved to Pictures\\Screenshots)")
-        return "screenshot_captured"
+            user32 = ctypes.windll.user32
+            user32.keybd_event(VK_LWIN, 0, 0, 0)
+            user32.keybd_event(VK_SNAPSHOT, 0, 0, 0)
+            time.sleep(0.05)
+            user32.keybd_event(VK_SNAPSHOT, 0, KEYEVENTF_KEYUP, 0)
+            user32.keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0)
+            print("[Nexa] Screenshot captured via Windows Win+PrtScn (Saved to Pictures\\Screenshots)")
+            return "screenshot_captured"
     except Exception as e:
         print(f"[Nexa] Native keybd_event error: {e}")
 
@@ -102,11 +104,12 @@ def close_app(target: Optional[str] = "active"):
     """
     print(f"System: CLOSE APPLICATION (Target: {target or 'active'})")
     try:
-        user32 = ctypes.windll.user32
-        hwnd = user32.GetForegroundWindow()
-        if hwnd:
-            WM_CLOSE = 0x0010
-            user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+        if sys.platform == "win32":
+            user32 = ctypes.windll.user32
+            hwnd = user32.GetForegroundWindow()
+            if hwnd:
+                WM_CLOSE = 0x0010
+                user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
     except Exception as e:
         print(f"[System] Error sending WM_CLOSE: {e}")
 
@@ -122,8 +125,15 @@ def refresh_page():
 
 def open_task_view():
     if pyautogui:
-        print("System: OPEN TASK VIEW (Win + Tab)")
-        pyautogui.hotkey('win', 'tab')
+        if sys.platform == "win32":
+            print("System: OPEN TASK VIEW (Win + Tab)")
+            pyautogui.hotkey('win', 'tab')
+        elif sys.platform == "darwin":
+            print("System: OPEN MISSION CONTROL (Ctrl + Up)")
+            pyautogui.hotkey('ctrl', 'up')
+        else:
+            print("System: OPEN TASK VIEW (Ctrl + Alt + Up)")
+            pyautogui.hotkey('ctrl', 'alt', 'up')
 
 def select_next_window():
     if pyautogui:

@@ -52,6 +52,7 @@ class VoiceListener:
         self.recognizer = sr.Recognizer() if sr else None
         self.sample_rate = 16000
         self.energy_threshold = 300.0  # Dynamic calibration baseline
+        self.is_user_speaking = False
 
     def start(self):
         """Start listening in a background daemon thread."""
@@ -94,19 +95,22 @@ class VoiceListener:
         silence_limit = 0.5   # Seconds of silence to mark phrase end
         
         audio_buffer = []
-        is_speaking = False
         silence_start_time = None
         
         try:
             with sd.InputStream(samplerate=self.sample_rate, channels=1, dtype='int16') as stream:
-                # 1. Ambient noise calibration for 0.5s
+                # 1. Ambient noise calibration for 1 second to skip ALSA cold-start zeros
+                for _ in range(10):
+                    stream.read(chunk_samples)
+                
                 calibration_samples = []
-                for _ in range(5):
+                for _ in range(10):
                     data, _ = stream.read(chunk_samples)
                     samples = data.flatten()
                     calibration_samples.append(np.sqrt(np.mean(samples.astype(np.float64)**2)))
                 ambient_rms = float(np.mean(calibration_samples))
-                self.energy_threshold = max(25.0, min(120.0, ambient_rms * 2.5 + 15.0))
+                # Remove the 120.0 hard cap so loud rooms don't get stuck forever
+                self.energy_threshold = max(50.0, ambient_rms * 2.5 + 20.0)
                 print(f"[VoiceListener] Mic calibrated (Ambient: {ambient_rms:.1f}, Trigger Threshold: {self.energy_threshold:.1f})")
                 
                 # 2. Continuous listening stream
@@ -115,7 +119,7 @@ class VoiceListener:
 
                     # Discard mic audio when Nexa is speaking or in cooldown window
                     if self.speech_coordinator and self.speech_coordinator.is_voice_blocked():
-                        is_speaking = False
+                        self.is_user_speaking = False
                         silence_start_time = None
                         audio_buffer = []
                         continue
@@ -124,18 +128,18 @@ class VoiceListener:
                     rms = np.sqrt(np.mean(samples.astype(np.float64)**2))
                     
                     if rms > self.energy_threshold:
-                        if not is_speaking:
-                            is_speaking = True
+                        if not self.is_user_speaking:
+                            self.is_user_speaking = True
                             audio_buffer = []
                         silence_start_time = None
                         audio_buffer.append(data.tobytes())
-                    elif is_speaking:
+                    elif self.is_user_speaking:
                         audio_buffer.append(data.tobytes())
                         if silence_start_time is None:
                             silence_start_time = time.time()
                         elif time.time() - silence_start_time > silence_limit:
                             # Finished speaking phrase
-                            is_speaking = False
+                            self.is_user_speaking = False
                             silence_start_time = None
                             if len(audio_buffer) >= 3:  # At least ~0.3s of speech
                                 pcm_bytes = b"".join(audio_buffer)

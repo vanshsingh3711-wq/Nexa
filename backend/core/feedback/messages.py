@@ -3,7 +3,7 @@ from typing import Dict, Optional
 # Centralized spoken feedback messages for Nexa Lifecycle Events
 # Normal desktop actions are completely silent.
 LIFECYCLE_FEEDBACK: Dict[str, str] = {
-    "nexa_activated": "Welcome, Vansh. How can I help you?",
+    "nexa_activated": "Welcome, Master. How can I help you?",
     "nexa_closing": "Alright, closing Nexa.",
     "gestures_enabled": "Gesture control enabled.",
     "gestures_disabled": "Gesture control disabled.",

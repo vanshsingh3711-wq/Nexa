@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Exec=/bin/bash -c "sleep 5 && cd /home/vansh/Documents/Nexa && ./start_nexa.sh > /home/vansh/Documents/Nexa/startup.log 2>&1"
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name=Nexa
+Comment=Start Nexa Backend and UI
+Terminal=false

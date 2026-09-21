@@ -9,7 +9,7 @@ from core.commands.event_router import EventRouter
 router = EventRouter()
 gesture_manager = GestureManager(event_router=router)
 router.gesture_manager = gesture_manager
-voice_listener: VoiceListener = None
+voice_listener: VoiceListener | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -27,11 +27,34 @@ async def lifespan(app: FastAPI):
     print("🚪 Say 'Close Nexa' to safely close.")
     print("="*50 + "\n")
 
+    def _on_wake():
+        router.wake_nexa()
+
+    def _on_close():
+        def _cleanup():
+            voice_listener.stop()
+            gesture_manager.stop()
+        router.close_nexa(cleanup_fn=_cleanup)
+
+    def _on_gesture(active, text):
+        gesture_manager.start() if active else gesture_manager.stop()
+
+    def _on_command(cmd, params=None):
+        router.execute_action(cmd, params=params, source="voice")
+
+    def _on_confirm():
+        router.confirm_pending()
+
+    def _on_cancel():
+        router.cancel_pending()
+
     voice_listener = VoiceListener(
-        on_nexa_wake=lambda: router.wake_nexa(),
-        on_nexa_close=lambda: router.close_nexa(cleanup_fn=lambda: (voice_listener.stop(), gesture_manager.stop())),
-        on_gesture_mode_change=lambda active, text: gesture_manager.start() if active else gesture_manager.stop(),
-        on_command=lambda cmd, params=None: router.execute_action(cmd, params=params, source="voice")
+        on_nexa_wake=_on_wake,
+        on_nexa_close=_on_close,
+        on_gesture_mode_change=_on_gesture,
+        on_command=_on_command,
+        on_confirm=_on_confirm,
+        on_cancel=_on_cancel
     )
     voice_listener.start()
     
@@ -51,7 +74,9 @@ def read_root():
         "status": "online",
         "nexa_active": router.is_nexa_active,
         "gestures_active": gesture_manager.is_active,
-        "voice_active": voice_listener.is_running if voice_listener else False
+        "voice_active": voice_listener.is_running if voice_listener else False,
+        "is_user_speaking": voice_listener.is_user_speaking if voice_listener else False,
+        "last_action_timestamp": router.last_action_timestamp
     }
 
 @app.get("/gesture")
@@ -90,3 +115,7 @@ def close_nexa():
     """Initiates clean Nexa application shutdown."""
     success = router.close_nexa()
     return {"success": success, "nexa_active": router.is_nexa_active}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000, reload=False, access_log=False)
